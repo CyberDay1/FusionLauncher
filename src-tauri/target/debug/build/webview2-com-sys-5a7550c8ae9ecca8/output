@@ -1,2 +1,0 @@
-cargo:rustc-link-search=native=C:\Users\conno\Documents\fusion-launcher\src-tauri\target\debug\build\webview2-com-sys-5a7550c8ae9ecca8\out\x64
-cargo:rustc-link-lib=advapi32
