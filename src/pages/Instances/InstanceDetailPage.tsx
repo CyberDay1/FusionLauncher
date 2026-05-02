@@ -1,0 +1,224 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router";
+import { invoke } from "@tauri-apps/api/core";
+
+interface InstanceConfig {
+  id: string;
+  name: string;
+  instance_type: string;
+  minecraft_version: string;
+  fusion_version: string;
+  install_status: string;
+}
+
+interface ModInfo {
+  filename: string;
+  mod_id: string;
+  name: string;
+  version: string;
+  description: string;
+  authors: string[];
+  origin: string;
+  enabled: boolean;
+  file_size: number;
+}
+
+const tabStyle = (active: boolean): React.CSSProperties => ({
+  padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+  background: active ? "linear-gradient(135deg, #6366f1, #4f46e5)" : "#1a1a1a",
+  color: active ? "#fff" : "#888", border: "none", cursor: "pointer",
+});
+
+export default function InstanceDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [instance, setInstance] = useState<InstanceConfig | null>(null);
+  const [mods, setMods] = useState<ModInfo[]>([]);
+  const [activeTab, setActiveTab] = useState<"mods" | "config" | "worlds">("mods");
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    loadInstance();
+    loadMods();
+  }, [id]);
+
+  async function loadInstance() {
+    try {
+      const list = await invoke<InstanceConfig[]>("list_instances");
+      setInstance(list.find(i => i.id === id) || null);
+    } catch {}
+  }
+
+  async function loadMods() {
+    if (!id) return;
+    try {
+      const list = await invoke<ModInfo[]>("scan_mods", { instanceId: id });
+      setMods(list);
+    } catch {}
+  }
+
+  async function handleToggle(filename: string, enable: boolean) {
+    if (!id) return;
+    setToggling(filename);
+    try {
+      await invoke("toggle_mod", { instanceId: id, filename, enabled: enable });
+      await loadMods();
+    } catch (e) { console.error(e); }
+    setToggling(null);
+  }
+
+  if (!instance) {
+    return (
+      <div style={{ padding: 24, color: "#666" }}>Loading instance...</div>
+    );
+  }
+
+  const isServer = instance.instance_type === "Server";
+  const accent = isServer ? "#f59e0b" : "#6366f1";
+
+  return (
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", height: "100%", overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <button onClick={() => navigate("/instances")} style={{
+          background: "none", border: "none", color: "#666", cursor: "pointer",
+          fontSize: 20, padding: 0,
+        }}>&larr;</button>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+          background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center",
+          color: accent, fontWeight: 700, fontSize: 18,
+        }}>{isServer ? "S" : "C"}</div>
+        <div style={{ flex: 1 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>{instance.name}</h1>
+          <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
+            MC {instance.minecraft_version} &middot; Fusion {instance.fusion_version}
+            <span style={{
+              marginLeft: 8, fontSize: 9, padding: "2px 6px", borderRadius: 4,
+              background: `${accent}20`, color: accent, fontWeight: 600,
+            }}>{isServer ? "SERVER" : "CLIENT"}</span>
+          </div>
+        </div>
+        <button onClick={() => navigate(`/instances/${id}/mods`)} style={{
+          padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+          background: "linear-gradient(135deg, #22c55e, #16a34a)",
+          color: "#fff", border: "none", cursor: "pointer",
+        }}>+ Add Mods</button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4 }}>
+        {(["mods", "config", "worlds"] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>
+            {tab === "mods" ? `Mods (${mods.length})` : tab === "config" ? "Config" : "Worlds"}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+        {activeTab === "mods" && (
+          <div>
+            {mods.length === 0 ? (
+              <div style={{
+                background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
+                padding: "48px 20px", textAlign: "center",
+              }}>
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#333" strokeWidth="1.5" style={{ marginBottom: 10 }}>
+                  <circle cx="14" cy="14" r="11"/><line x1="14" y1="8" x2="14" y2="20"/><line x1="8" y1="14" x2="20" y2="14"/>
+                </svg>
+                <p style={{ fontSize: 13, color: "#555", marginBottom: 14 }}>No mods installed</p>
+                <button onClick={() => navigate(`/instances/${id}/mods`)} style={{
+                  padding: "8px 20px", borderRadius: 8, fontSize: 12, fontWeight: 500,
+                  background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                  color: "#fff", border: "none", cursor: "pointer",
+                }}>Browse Mods</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {mods.map(mod => (
+                  <div key={mod.filename} style={{
+                    background: "#131313", border: "1px solid #1e1e1e", borderRadius: 10,
+                    padding: "10px 14px", display: "flex", alignItems: "center", gap: 12,
+                    opacity: mod.enabled ? 1 : 0.5,
+                    transition: "opacity 0.15s, border-color 0.15s",
+                  }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2a2a2a"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}
+                  >
+                    {/* Origin badge */}
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                      background: mod.origin === "fabric" ? "#dbb98f15" : mod.origin === "neoforge" ? "#d4541415" : "#1a1a1a",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+                      color: mod.origin === "fabric" ? "#dbb98f" : mod.origin === "neoforge" ? "#d45414" : "#555",
+                    }}>{mod.origin.slice(0, 3)}</div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#e5e5e5" }}>{mod.name}</span>
+                        <span style={{ fontSize: 10, color: "#555" }}>{mod.version}</span>
+                      </div>
+                      {mod.description && (
+                        <div style={{
+                          fontSize: 11, color: "#666", marginTop: 2,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>{mod.description}</div>
+                      )}
+                      <div style={{ fontSize: 10, color: "#444", marginTop: 2 }}>
+                        {mod.authors.length > 0 && `by ${mod.authors.join(", ")} · `}
+                        {(mod.file_size / 1024).toFixed(0)} KB
+                      </div>
+                    </div>
+
+                    {/* Toggle + delete */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {/* Toggle switch */}
+                      <div
+                        onClick={() => handleToggle(mod.filename, !mod.enabled)}
+                        style={{
+                          width: 36, height: 20, borderRadius: 10, padding: 2,
+                          background: mod.enabled ? "#22c55e" : "#2a2a2a",
+                          cursor: toggling === mod.filename ? "wait" : "pointer",
+                          transition: "background 0.2s", position: "relative",
+                        }}
+                      >
+                        <div style={{
+                          width: 16, height: 16, borderRadius: "50%",
+                          background: mod.enabled ? "#fff" : "#666",
+                          transform: mod.enabled ? "translateX(16px)" : "translateX(0)",
+                          transition: "transform 0.2s, background 0.2s",
+                        }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "config" && (
+          <div style={{
+            background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
+            padding: "40px 20px", textAlign: "center", color: "#555", fontSize: 13,
+          }}>
+            Config editor coming soon
+          </div>
+        )}
+
+        {activeTab === "worlds" && (
+          <div style={{
+            background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
+            padding: "40px 20px", textAlign: "center", color: "#555", fontSize: 13,
+          }}>
+            World management coming soon
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

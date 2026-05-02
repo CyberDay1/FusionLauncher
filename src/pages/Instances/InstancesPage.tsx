@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useNavigate } from "react-router";
 
 interface InstanceConfig {
   id: string;
@@ -31,6 +32,7 @@ export default function InstancesPage() {
   const [newVersion, setNewVersion] = useState("26.1.2");
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadInstances();
@@ -130,6 +132,7 @@ export default function InstancesPage() {
                 padding: "12px 16px", display: "flex", alignItems: "center", gap: 14,
                 transition: "border-color 0.15s", cursor: "pointer",
               }}
+                onClick={() => navigate(`/instances/${inst.id}`)}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2a2a2a"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}
               >
@@ -154,12 +157,12 @@ export default function InstancesPage() {
                   {installing === inst.id ? (
                     <span style={{ fontSize: 11, color: "#f59e0b" }}>{progress}</span>
                   ) : inst.install_status === "Ready" ? (
-                    <button onClick={() => handleLaunch(inst.id)}
+                    <button onClick={(e) => { e.stopPropagation(); handleLaunch(inst.id); }}
                       style={{ ...btn, padding: "6px 16px", fontSize: 12, background: "linear-gradient(135deg, #22c55e, #16a34a)" }}>
                       Launch
                     </button>
                   ) : (
-                    <button onClick={() => handleInstall(inst.id)}
+                    <button onClick={(e) => { e.stopPropagation(); handleInstall(inst.id); }}
                       style={{ ...btn, padding: "6px 16px", fontSize: 12, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
                       Install
                     </button>

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useParams, useNavigate } from "react-router";
 import ModDetailPanel from "./ModDetailPanel";
+
+interface InstanceConfig {
+  id: string;
+  name: string;
+  instance_type: string;
+  minecraft_version: string;
+}
 
 interface ModrinthProject {
   project_id: string;
@@ -33,6 +41,8 @@ function formatDownloads(n: number): string {
 const MC_VERSIONS = ["26.1.2", "26.1.1", "26.1", "1.21.5", "1.21.4", "1.21.1", "1.20.4", "1.20.1"];
 
 export default function ModBrowserPage() {
+  const { id: routeInstanceId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [mcVersion, setMcVersion] = useState("26.1.2");
   const [mods, setMods] = useState<ModrinthProject[]>([]);
@@ -44,6 +54,23 @@ export default function ModBrowserPage() {
   const [installMsg, setInstallMsg] = useState("");
   const [selectedMod, setSelectedMod] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Instance management
+  const [instances, setInstances] = useState<InstanceConfig[]>([]);
+  const [targetInstance, setTargetInstance] = useState<string>(routeInstanceId || "");
+
+  useEffect(() => {
+    invoke<InstanceConfig[]>("list_instances").then(list => {
+      setInstances(list);
+      if (routeInstanceId) {
+        setTargetInstance(routeInstanceId);
+        const inst = list.find(i => i.id === routeInstanceId);
+        if (inst) setMcVersion(inst.minecraft_version);
+      } else if (list.length > 0 && !targetInstance) {
+        setTargetInstance(list[0].id);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Load trending on mount and version change
   useEffect(() => {
@@ -100,7 +127,7 @@ export default function ModBrowserPage() {
     setInstallMsg("Installing...");
     try {
       const result = await invoke<InstallResult>("install_mod_with_deps", {
-        instanceId: "default", projectId, mcVersion,
+        instanceId: targetInstance || "default", projectId, mcVersion,
       });
       const parts: string[] = [];
       if (result.installed.length > 0) parts.push(`${result.installed.length} installed`);
@@ -128,16 +155,48 @@ export default function ModBrowserPage() {
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", height: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Mod Browser</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>MC:</span>
-          <select value={mcVersion} onChange={(e) => setMcVersion(e.target.value)}
-            style={{
-              background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 6,
-              padding: "4px 8px", fontSize: 12, color: "#e5e5e5", cursor: "pointer", outline: "none",
-            }}>
-            {MC_VERSIONS.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {routeInstanceId && (
+            <button onClick={() => navigate(`/instances/${routeInstanceId}`)} style={{
+              background: "none", border: "none", color: "#666", cursor: "pointer",
+              fontSize: 18, padding: 0,
+            }}>&larr;</button>
+          )}
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Mod Browser</h1>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Instance selector */}
+          {instances.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "#555" }}>Install to:</span>
+              <select value={targetInstance}
+                onChange={(e) => {
+                  setTargetInstance(e.target.value);
+                  const inst = instances.find(i => i.id === e.target.value);
+                  if (inst) setMcVersion(inst.minecraft_version);
+                }}
+                style={{
+                  background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 6,
+                  padding: "4px 8px", fontSize: 12, color: "#e5e5e5", cursor: "pointer", outline: "none",
+                  maxWidth: 150,
+                }}>
+                {instances.map(i => (
+                  <option key={i.id} value={i.id}>{i.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* MC version */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: "#555" }}>MC:</span>
+            <select value={mcVersion} onChange={(e) => setMcVersion(e.target.value)}
+              style={{
+                background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 6,
+                padding: "4px 8px", fontSize: 12, color: "#e5e5e5", cursor: "pointer", outline: "none",
+              }}>
+              {MC_VERSIONS.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
