@@ -1,0 +1,11 @@
+C:\Users\conno\Documents\fusion-launcher\src-tauri\target\debug\deps\deflate64-5c1b2b78c0c33e2d.d: C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\lib.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\buffer.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\huffman_tree.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\inflater_managed.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\input_buffer.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\output_window.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\stream.rs
+
+C:\Users\conno\Documents\fusion-launcher\src-tauri\target\debug\deps\libdeflate64-5c1b2b78c0c33e2d.rmeta: C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\lib.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\buffer.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\huffman_tree.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\inflater_managed.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\input_buffer.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\output_window.rs C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\stream.rs
+
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\lib.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\buffer.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\huffman_tree.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\inflater_managed.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\input_buffer.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\output_window.rs:
+C:\Users\conno\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\deflate64-0.1.12\src\stream.rs:
