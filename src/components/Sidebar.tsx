@@ -1,17 +1,11 @@
 import { useLocation, useNavigate } from "react-router";
 
-interface NavItem {
-  path: string;
-  label: string;
-  icon: string;
-}
-
-const navItems: NavItem[] = [
-  { path: "/", label: "Home", icon: "H" },
-  { path: "/instances", label: "Instances", icon: "I" },
-  { path: "/mods", label: "Mods", icon: "M" },
-  { path: "/server", label: "Server", icon: "S" },
-  { path: "/settings", label: "Settings", icon: "G" },
+const navItems = [
+  { path: "/", label: "Home", icon: "\u2302" },
+  { path: "/instances", label: "Instances", icon: "\u25A6" },
+  { path: "/mods", label: "Mods", icon: "\u29C9" },
+  { path: "/server", label: "Server", icon: "\u2630" },
+  { path: "/settings", label: "Settings", icon: "\u2699" },
 ];
 
 export default function Sidebar() {
@@ -19,23 +13,37 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   return (
-    <div className="w-52 bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col h-full">
-      {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-1">
+    <div
+      className="w-48 flex flex-col h-full shrink-0"
+      style={{ background: "#111111", borderRight: "1px solid #1e1e1e" }}
+    >
+      <nav className="flex-1 py-3 px-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
-                ${isActive
-                  ? "bg-[var(--accent)] text-white shadow-lg shadow-indigo-500/20"
-                  : "text-gray-400 hover:text-gray-200 hover:bg-[var(--bg-hover)]"
-                }`}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all cursor-pointer"
+              style={{
+                background: isActive ? "linear-gradient(135deg, #4f46e5, #6366f1)" : "transparent",
+                color: isActive ? "#fff" : "#808080",
+                boxShadow: isActive ? "0 2px 16px rgba(79,70,229,0.35)" : "none",
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "#1a1a1a";
+                  e.currentTarget.style.color = "#d1d5db";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "#808080";
+                }
+              }}
             >
-              <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold
-                ${isActive ? "bg-white/20" : "bg-[var(--bg-tertiary)]"}`}>
+              <span style={{ fontSize: "14px", width: "20px", textAlign: "center", opacity: isActive ? 1 : 0.6 }}>
                 {item.icon}
               </span>
               {item.label}
@@ -44,11 +52,10 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Status bar */}
-      <div className="p-3 border-t border-[var(--border)]">
-        <div className="flex items-center gap-2 text-[11px] text-gray-500">
-          <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span>Ready</span>
+      <div className="px-3 py-3" style={{ borderTop: "1px solid #1e1e1e" }}>
+        <div className="flex items-center gap-2" style={{ fontSize: "10px", color: "#4b5563" }}>
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e" }} />
+          Ready
         </div>
       </div>
     </div>

@@ -8,11 +8,17 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   return (
-    <div className="h-screen flex flex-col">
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <TitleBar />
-      <div className="flex flex-1 overflow-hidden">
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-[var(--bg-primary)]">
+        <main style={{
+          flex: 1,
+          width: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          background: "#0c0c0c",
+        }}>
           {children}
         </main>
       </div>

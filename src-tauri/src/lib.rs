@@ -13,7 +13,7 @@ pub mod system;
 use instance::config::{InstanceConfig, InstanceType};
 use java::runtime::JavaRuntime;
 use minecraft::manifest::VersionEntry;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -23,6 +23,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_launcher_info,
@@ -44,6 +45,9 @@ pub fn run() {
             send_server_command,
             create_backup,
             list_backups,
+            check_for_updates,
+            get_instance_thumbnail,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fusion Launcher");
@@ -387,4 +391,70 @@ async fn list_backups(
 ) -> Result<Vec<backup::creator::BackupInfo>, String> {
     let backup_dir = state.instances_dir().join(&instance_id).join("backups");
     backup::creator::list_backups(&backup_dir).map_err(|e| e.to_string())
+}
+
+// --- Update check ---
+
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    available: bool,
+    latest_version: String,
+    current_version: String,
+    release_url: String,
+    release_notes: String,
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<UpdateInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("FusionLauncher/0.1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let current_version = "0.1.0-alpha.1";
+
+    match fusion::releases::fetch_latest_release(&client).await {
+        Ok(release) => {
+            let latest = release.tag_name.trim_start_matches('v').to_string();
+            let available = latest != current_version;
+            let notes = release.name.unwrap_or_default();
+
+            Ok(UpdateInfo {
+                available,
+                latest_version: latest,
+                current_version: current_version.to_string(),
+                release_url: format!(
+                    "https://github.com/CyberDay1/FusionLoader/releases/tag/{}",
+                    release.tag_name
+                ),
+                release_notes: notes,
+            })
+        }
+        Err(_) => Ok(UpdateInfo {
+            available: false,
+            latest_version: current_version.to_string(),
+            current_version: current_version.to_string(),
+            release_url: String::new(),
+            release_notes: String::new(),
+        }),
+    }
+}
+
+// --- Instance thumbnail (screenshot) ---
+
+#[tauri::command]
+async fn get_instance_thumbnail(
+    state: tauri::State<'_, AppState>,
+    instance_id: String,
+) -> Result<Option<String>, String> {
+    let game_dir = state.instances_dir()
+        .join(&instance_id)
+        .join(".minecraft");
+    Ok(instance::screenshots::get_latest_screenshot(&game_dir))
+}
+
+#[tauri::command]
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
 }
