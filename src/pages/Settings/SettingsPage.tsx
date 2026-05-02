@@ -1,81 +1,139 @@
+import { useState } from "react";
+
+const sectionStyle: React.CSSProperties = {
+  background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 20,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 12, color: "#888", marginBottom: 6, display: "block",
+};
+
+const inputStyle: React.CSSProperties = {
+  background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8,
+  padding: "8px 12px", fontSize: 13, color: "#e5e5e5", outline: "none",
+  width: "100%", boxSizing: "border-box",
+};
+
 export default function SettingsPage() {
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", overflowY: "auto", height: "100%" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Settings</h1>
 
-      {/* Java Settings */}
-      <section className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-5 space-y-4">
-        <h2 className="text-lg font-semibold">Java Runtime</h2>
-        <div className="grid grid-cols-2 gap-4">
+      {/* Java Runtime */}
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 16px 0" }}>Java Runtime</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Java Path</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Auto-detect"
-                className="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-[var(--accent)]"
-                readOnly
-              />
-              <button className="px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg text-sm text-gray-400 hover:text-gray-200 hover:border-[var(--border-light)] transition-colors">
-                Browse
-              </button>
+            <label style={labelStyle}>Java Path</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="text" placeholder="Auto-detect" readOnly style={{ ...inputStyle, flex: 1 }} />
+              <button style={{
+                padding: "8px 14px", borderRadius: 8, fontSize: 12,
+                background: "#1a1a1a", border: "1px solid #2a2a2a",
+                color: "#888", cursor: "pointer",
+              }}>Browse</button>
             </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Status</label>
-            <div className="flex items-center gap-2 py-2">
-              <div className="w-2 h-2 rounded-full bg-yellow-500" />
-              <span className="text-sm text-yellow-400">Not configured</span>
+            <label style={labelStyle}>Status</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0" }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+              <span style={{ fontSize: 13, color: "#f59e0b" }}>Not configured</span>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Memory Settings */}
-      <section className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-5 space-y-4">
-        <h2 className="text-lg font-semibold">Memory</h2>
-        <div className="grid grid-cols-2 gap-4">
+      {/* Memory */}
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 16px 0" }}>Memory</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Minimum (MB)</label>
-            <input
-              type="number"
-              defaultValue={512}
-              min={256}
-              className="w-full bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-[var(--accent)]"
-            />
+            <label style={labelStyle}>Minimum (MB)</label>
+            <input type="number" defaultValue={512} min={256} style={inputStyle} />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Maximum (MB)</label>
-            <input
-              type="number"
-              defaultValue={4096}
-              min={512}
-              className="w-full bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-[var(--accent)]"
-            />
+            <label style={labelStyle}>Maximum (MB)</label>
+            <input type="number" defaultValue={4096} min={512} style={inputStyle} />
           </div>
         </div>
-      </section>
+        {/* Memory slider visual */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#555", marginBottom: 4 }}>
+            <span>512 MB</span><span>System RAM</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: "#1a1a1a", position: "relative" }}>
+            <div style={{
+              height: "100%", borderRadius: 3, width: "50%",
+              background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+            }} />
+          </div>
+        </div>
+      </div>
+
+      {/* JVM Arguments */}
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 16px 0" }}>JVM Arguments</h2>
+        <input type="text" placeholder="-XX:+UseZGC -XX:+ZGenerational"
+          style={{ ...inputStyle, fontFamily: "'Cascadia Code', 'Consolas', monospace" }} />
+        <p style={{ fontSize: 11, color: "#555", marginTop: 6 }}>
+          Additional JVM arguments. --enable-preview is always added automatically.
+        </p>
+      </div>
 
       {/* Launcher Behavior */}
-      <section className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-5 space-y-4">
-        <h2 className="text-lg font-semibold">Launcher Behavior</h2>
-        <ToggleSetting label="Close launcher when game starts" defaultChecked={false} />
-        <ToggleSetting label="Minimize to system tray" defaultChecked={true} />
-        <ToggleSetting label="Check for updates on startup" defaultChecked={true} />
-      </section>
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 16px 0" }}>Launcher Behavior</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <ToggleSetting label="Close launcher when game starts" defaultChecked={false} />
+          <ToggleSetting label="Minimize to system tray" defaultChecked={true} />
+          <ToggleSetting label="Check for updates on startup" defaultChecked={true} />
+          <ToggleSetting label="Show notifications for server events" defaultChecked={true} />
+        </div>
+      </div>
+
+      {/* About */}
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 12px 0" }}>About</h2>
+        <div style={{ fontSize: 12, color: "#666", lineHeight: 1.8 }}>
+          <div>Fusion Launcher v0.1.0</div>
+          <div>Built with Tauri 2 + React + TypeScript</div>
+          <div style={{ marginTop: 8 }}>
+            <a href="https://github.com/CyberDay1/FusionLauncher" target="_blank"
+              style={{ color: "#6366f1", textDecoration: "none" }}>
+              GitHub Repository
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 function ToggleSetting({ label, defaultChecked }: { label: string; defaultChecked: boolean }) {
+  const [checked, setChecked] = useState(defaultChecked);
+
   return (
-    <label className="flex items-center justify-between cursor-pointer">
-      <span className="text-sm text-gray-300">{label}</span>
-      <div className="relative">
-        <input type="checkbox" defaultChecked={defaultChecked} className="sr-only peer" />
-        <div className="w-10 h-5 bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-full peer-checked:bg-[var(--accent)] transition-colors" />
-        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-gray-400 rounded-full peer-checked:translate-x-5 peer-checked:bg-white transition-transform" />
+    <div
+      onClick={() => setChecked(!checked)}
+      style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        cursor: "pointer", userSelect: "none",
+      }}
+    >
+      <span style={{ fontSize: 13, color: "#d1d5db" }}>{label}</span>
+      <div style={{
+        width: 38, height: 20, borderRadius: 10, padding: 2,
+        background: checked ? "#6366f1" : "#2a2a2a",
+        transition: "background 0.2s", position: "relative",
+      }}>
+        <div style={{
+          width: 16, height: 16, borderRadius: "50%",
+          background: checked ? "#fff" : "#666",
+          transform: checked ? "translateX(18px)" : "translateX(0)",
+          transition: "transform 0.2s, background 0.2s",
+        }} />
       </div>
-    </label>
+    </div>
   );
 }

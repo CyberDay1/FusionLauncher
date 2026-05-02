@@ -1,7 +1,9 @@
 use crate::error::LauncherError;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
+const USER_AGENT: &str = "FusionLauncher/0.1.0 (https://github.com/CyberDay1/FusionLauncher)";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModrinthProject {
@@ -26,6 +28,8 @@ pub struct ModrinthVersion {
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
     pub files: Vec<ModrinthFile>,
+    #[serde(default)]
+    pub dependencies: Vec<ModrinthDependency>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,10 +40,24 @@ pub struct ModrinthFile {
     pub primary: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModrinthDependency {
+    pub version_id: Option<String>,
+    pub project_id: Option<String>,
+    pub dependency_type: String, // "required", "optional", "incompatible"
+}
+
+/// Result of installing a mod with its dependencies.
+#[derive(Clone, Debug, Serialize)]
+pub struct InstallResult {
+    pub installed: Vec<String>,  // filenames of installed mods
+    pub skipped: Vec<String>,    // already present
+    pub failed: Vec<String>,     // failed to download
+}
+
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
     hits: Vec<SearchHit>,
-    total_hits: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,42 +74,50 @@ struct SearchHit {
     server_side: String,
 }
 
+fn hit_to_project(h: SearchHit) -> ModrinthProject {
+    ModrinthProject {
+        project_id: h.project_id, slug: h.slug, title: h.title,
+        description: h.description, author: h.author, downloads: h.downloads,
+        icon_url: h.icon_url, categories: h.categories,
+        client_side: h.client_side, server_side: h.server_side,
+    }
+}
+
 /// Searches Modrinth for mods matching the query.
 pub async fn search_mods(
     client: &reqwest::Client,
     query: &str,
     mc_version: &str,
 ) -> Result<Vec<ModrinthProject>, LauncherError> {
-    let facets = format!(
-        r#"[["versions:{}"],["project_type:mod"]]"#,
-        mc_version
-    );
+    let facets = format!(r#"[["versions:{}"],["project_type:mod"]]"#, mc_version);
+
+    let response: SearchResponse = client
+        .get(format!("{}/search", MODRINTH_API))
+        .query(&[("query", query), ("facets", &facets), ("limit", "20")])
+        .header("User-Agent", USER_AGENT)
+        .send().await?.json().await?;
+
+    Ok(response.hits.into_iter().map(hit_to_project).collect())
+}
+
+/// Gets trending/popular mods for a MC version (shown before searching).
+pub async fn get_trending_mods(
+    client: &reqwest::Client,
+    mc_version: &str,
+) -> Result<Vec<ModrinthProject>, LauncherError> {
+    let facets = format!(r#"[["versions:{}"],["project_type:mod"]]"#, mc_version);
 
     let response: SearchResponse = client
         .get(format!("{}/search", MODRINTH_API))
         .query(&[
-            ("query", query),
-            ("facets", &facets),
-            ("limit", "20"),
+            ("facets", facets.as_str()),
+            ("limit", "15"),
+            ("index", "downloads"),  // Sort by most downloaded
         ])
-        .header("User-Agent", "FusionLauncher/0.1.0")
-        .send()
-        .await?
-        .json()
-        .await?;
+        .header("User-Agent", USER_AGENT)
+        .send().await?.json().await?;
 
-    Ok(response.hits.into_iter().map(|h| ModrinthProject {
-        project_id: h.project_id,
-        slug: h.slug,
-        title: h.title,
-        description: h.description,
-        author: h.author,
-        downloads: h.downloads,
-        icon_url: h.icon_url,
-        categories: h.categories,
-        client_side: h.client_side,
-        server_side: h.server_side,
-    }).collect())
+    Ok(response.hits.into_iter().map(hit_to_project).collect())
 }
 
 /// Gets available versions for a project filtered by MC version.
@@ -103,16 +129,149 @@ pub async fn get_versions(
     let versions: Vec<ModrinthVersion> = client
         .get(format!("{}/project/{}/version", MODRINTH_API, project_id))
         .query(&[("game_versions", &format!(r#"["{}"]"#, mc_version))])
-        .header("User-Agent", "FusionLauncher/0.1.0")
-        .send()
-        .await?
-        .json()
-        .await?;
-
+        .header("User-Agent", USER_AGENT)
+        .send().await?.json().await?;
     Ok(versions)
 }
 
-/// Downloads a mod file to the mods directory.
+/// Gets a specific version by ID.
+pub async fn get_version(
+    client: &reqwest::Client,
+    version_id: &str,
+) -> Result<ModrinthVersion, LauncherError> {
+    let version: ModrinthVersion = client
+        .get(format!("{}/version/{}", MODRINTH_API, version_id))
+        .header("User-Agent", USER_AGENT)
+        .send().await?.json().await?;
+    Ok(version)
+}
+
+/// Installs a mod and all its required dependencies.
+/// Recursively resolves the dependency tree, skipping already-installed mods.
+pub async fn install_mod_with_deps(
+    client: &reqwest::Client,
+    project_id: &str,
+    mc_version: &str,
+    mods_dir: &std::path::Path,
+) -> Result<InstallResult, LauncherError> {
+    let mut result = InstallResult {
+        installed: vec![], skipped: vec![], failed: vec![],
+    };
+
+    // Track which projects we've already processed to avoid cycles
+    let mut processed: HashSet<String> = HashSet::new();
+
+    // Get existing mod filenames to detect already-installed mods
+    let existing: HashSet<String> = if mods_dir.exists() {
+        std::fs::read_dir(mods_dir)?
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.ends_with(".jar") || name.ends_with(".jar.disabled") {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        HashSet::new()
+    };
+
+    install_recursive(
+        client, project_id, mc_version, mods_dir,
+        &mut processed, &existing, &mut result,
+    ).await?;
+
+    Ok(result)
+}
+
+fn install_recursive<'a>(
+    client: &'a reqwest::Client,
+    project_id: &'a str,
+    mc_version: &'a str,
+    mods_dir: &'a std::path::Path,
+    processed: &'a mut HashSet<String>,
+    existing: &'a HashSet<String>,
+    result: &'a mut InstallResult,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), LauncherError>> + Send + 'a>> {
+  Box::pin(async move {
+    if processed.contains(project_id) {
+        return Ok(());
+    }
+    processed.insert(project_id.to_string());
+
+    // Get the latest version for this MC version
+    let versions = get_versions(client, project_id, mc_version).await?;
+    let version = match versions.first() {
+        Some(v) => v.clone(),
+        None => {
+            result.failed.push(format!("No version found for {}", project_id));
+            return Ok(());
+        }
+    };
+
+    // Find the primary file
+    let file = match version.files.iter().find(|f| f.primary).or(version.files.first()) {
+        Some(f) => f.clone(),
+        None => {
+            result.failed.push(format!("No file for {}", project_id));
+            return Ok(());
+        }
+    };
+
+    // Check if already installed
+    if existing.contains(&file.filename) {
+        result.skipped.push(file.filename.clone());
+    } else {
+        // Download the mod
+        std::fs::create_dir_all(mods_dir)?;
+        match crate::minecraft::downloader::download_file(
+            client, &file.url, &mods_dir.join(&file.filename)
+        ).await {
+            Ok(_) => {
+                tracing::info!("Installed mod: {}", file.filename);
+                result.installed.push(file.filename.clone());
+            }
+            Err(e) => {
+                tracing::warn!("Failed to download {}: {}", file.filename, e);
+                result.failed.push(file.filename.clone());
+            }
+        }
+    }
+
+    // Resolve required dependencies recursively
+    for dep in &version.dependencies {
+        if dep.dependency_type != "required" {
+            continue;
+        }
+
+        if let Some(ref dep_project_id) = dep.project_id {
+            install_recursive(
+                client, dep_project_id, mc_version, mods_dir,
+                processed, existing, result,
+            ).await?;
+        } else if let Some(ref dep_version_id) = dep.version_id {
+            // Resolve the version to get its project_id
+            match get_version(client, dep_version_id).await {
+                Ok(dep_version) => {
+                    install_recursive(
+                        client, &dep_version.project_id, mc_version, mods_dir,
+                        processed, existing, result,
+                    ).await?;
+                }
+                Err(e) => {
+                    result.failed.push(format!("dep {}: {}", dep_version_id, e));
+                }
+            }
+        }
+    }
+
+    Ok(())
+  })
+}
+
+/// Downloads a single mod file to the mods directory.
 pub async fn download_mod(
     client: &reqwest::Client,
     file: &ModrinthFile,

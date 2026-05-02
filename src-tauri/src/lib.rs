@@ -40,6 +40,8 @@ pub fn run() {
             scan_mods,
             toggle_mod,
             search_modrinth,
+            get_trending_mods,
+            install_mod_with_deps,
             get_server_properties,
             set_server_properties,
             send_server_command,
@@ -305,6 +307,33 @@ async fn search_modrinth(
 ) -> Result<Vec<mods::modrinth::ModrinthProject>, String> {
     let client = reqwest::Client::new();
     mods::modrinth::search_mods(&client, &query, &mc_version)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_trending_mods(
+    mc_version: String,
+) -> Result<Vec<mods::modrinth::ModrinthProject>, String> {
+    let client = reqwest::Client::new();
+    mods::modrinth::get_trending_mods(&client, &mc_version)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn install_mod_with_deps(
+    state: tauri::State<'_, AppState>,
+    instance_id: String,
+    project_id: String,
+    mc_version: String,
+) -> Result<mods::modrinth::InstallResult, String> {
+    let mods_dir = state.instances_dir()
+        .join(&instance_id)
+        .join(".minecraft")
+        .join("mods");
+    let client = reqwest::Client::new();
+    mods::modrinth::install_mod_with_deps(&client, &project_id, &mc_version, &mods_dir)
         .await
         .map_err(|e| e.to_string())
 }
