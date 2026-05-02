@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import ModDetailPanel from "./ModDetailPanel";
 
 interface ModrinthProject {
   project_id: string;
@@ -10,6 +11,11 @@ interface ModrinthProject {
   downloads: number;
   icon_url: string | null;
   categories: string[];
+}
+
+interface SearchResult {
+  mods: ModrinthProject[];
+  total_hits: number;
 }
 
 interface InstallResult {
@@ -29,68 +35,102 @@ const MC_VERSIONS = ["26.1.2", "26.1.1", "26.1", "1.21.5", "1.21.4", "1.21.1", "
 export default function ModBrowserPage() {
   const [query, setQuery] = useState("");
   const [mcVersion, setMcVersion] = useState("26.1.2");
-  const [results, setResults] = useState<ModrinthProject[]>([]);
-  const [trending, setTrending] = useState<ModrinthProject[]>([]);
+  const [mods, setMods] = useState<ModrinthProject[]>([]);
+  const [totalHits, setTotalHits] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const [installMsg, setInstallMsg] = useState("");
+  const [selectedMod, setSelectedMod] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Load trending on mount and version change
   useEffect(() => {
-    loadTrending();
+    setMods([]);
     setSearched(false);
-    setResults([]);
+    setQuery("");
+    loadTrending(0, false);
   }, [mcVersion]);
 
-  async function loadTrending() {
+  async function loadTrending(offset: number, append: boolean) {
+    if (offset === 0) setSearching(true);
+    else setLoadingMore(true);
     try {
-      const mods = await invoke<ModrinthProject[]>("get_trending_mods", { mcVersion });
-      setTrending(mods);
+      const result = await invoke<SearchResult>("get_trending_mods", { mcVersion, offset });
+      setMods(prev => append ? [...prev, ...result.mods] : result.mods);
+      setTotalHits(result.total_hits);
     } catch (e) { console.error("Trending failed:", e); }
+    setSearching(false);
+    setLoadingMore(false);
   }
 
-  async function handleSearch() {
-    if (!query.trim()) { setSearched(false); return; }
-    setSearching(true); setSearched(true);
+  async function handleSearch(offset: number, append: boolean) {
+    if (!query.trim()) { setSearched(false); loadTrending(0, false); return; }
+    if (offset === 0) { setSearching(true); setSearched(true); }
+    else setLoadingMore(true);
     try {
-      const mods = await invoke<ModrinthProject[]>("search_modrinth", { query, mcVersion });
-      setResults(mods);
+      const result = await invoke<SearchResult>("search_modrinth", { query, mcVersion, offset });
+      setMods(prev => append ? [...prev, ...result.mods] : result.mods);
+      setTotalHits(result.total_hits);
     } catch (e) { console.error("Search failed:", e); }
     setSearching(false);
+    setLoadingMore(false);
   }
 
-  async function handleInstall(projectId: string, _title: string) {
+  function loadMore() {
+    const offset = mods.length;
+    if (searched) handleSearch(offset, true);
+    else loadTrending(offset, true);
+  }
+
+  // Infinite scroll detection
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || loadingMore || searching) return;
+    if (mods.length >= totalHits) return;
+    // Trigger when within 200px of bottom
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+      loadMore();
+    }
+  }, [mods.length, totalHits, loadingMore, searching, searched, query]);
+
+  async function handleInstall(projectId: string) {
     setInstalling(projectId);
     setInstallMsg("Installing...");
     try {
-      // TODO: use actual instance ID once instance selector is wired
       const result = await invoke<InstallResult>("install_mod_with_deps", {
-        instanceId: "default",
-        projectId,
-        mcVersion,
+        instanceId: "default", projectId, mcVersion,
       });
       const parts: string[] = [];
       if (result.installed.length > 0) parts.push(`${result.installed.length} installed`);
-      if (result.skipped.length > 0) parts.push(`${result.skipped.length} already present`);
+      if (result.skipped.length > 0) parts.push(`${result.skipped.length} present`);
       if (result.failed.length > 0) parts.push(`${result.failed.length} failed`);
       setInstallMsg(parts.join(", ") || "Done");
-    } catch (e: any) {
-      setInstallMsg(`Error: ${e}`);
-    }
+    } catch (e: any) { setInstallMsg(`Error: ${e}`); }
     setTimeout(() => { setInstalling(null); setInstallMsg(""); }, 3000);
   }
 
-  const displayMods = searched ? results : trending;
+  const hasMore = mods.length < totalHits;
   const sectionTitle = searched ? `Results for "${query}"` : "Popular Mods";
+
+  // Show detail panel when a mod is selected
+  if (selectedMod) {
+    return (
+      <ModDetailPanel
+        projectId={selectedMod}
+        mcVersion={mcVersion}
+        onClose={() => setSelectedMod(null)}
+      />
+    );
+  }
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", height: "100%", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Mod Browser</h1>
-        {/* Version selector */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>MC Version:</span>
+          <span style={{ fontSize: 12, color: "#666" }}>MC:</span>
           <select value={mcVersion} onChange={(e) => setMcVersion(e.target.value)}
             style={{
               background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 6,
@@ -101,14 +141,14 @@ export default function ModBrowserPage() {
         </div>
       </div>
 
-      {/* Search bar */}
+      {/* Search */}
       <div style={{ display: "flex", gap: 8 }}>
         <input type="text" placeholder="Search Modrinth for mods..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleSearch();
-            if (e.key === "Escape") { setQuery(""); setSearched(false); }
+            if (e.key === "Enter") handleSearch(0, false);
+            if (e.key === "Escape") { setQuery(""); setSearched(false); loadTrending(0, false); }
           }}
           style={{
             flex: 1, background: "#131313", border: "1px solid #1e1e1e", borderRadius: 10,
@@ -116,19 +156,17 @@ export default function ModBrowserPage() {
           }}
         />
         {searched && (
-          <button onClick={() => { setQuery(""); setSearched(false); }}
+          <button onClick={() => { setQuery(""); setSearched(false); loadTrending(0, false); }}
             style={{
               padding: "10px 16px", borderRadius: 10, fontSize: 13,
-              background: "#1a1a1a", border: "1px solid #2a2a2a",
-              color: "#888", cursor: "pointer",
+              background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888", cursor: "pointer",
             }}>Clear</button>
         )}
-        <button onClick={handleSearch} disabled={searching}
+        <button onClick={() => handleSearch(0, false)} disabled={searching}
           style={{
             padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
             background: searching ? "#333" : "linear-gradient(135deg, #6366f1, #4f46e5)",
-            color: "#fff", border: "none", cursor: searching ? "wait" : "pointer",
-            whiteSpace: "nowrap",
+            color: "#fff", border: "none", cursor: searching ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
           {searching ? "Searching..." : "Search"}
         </button>
@@ -137,12 +175,15 @@ export default function ModBrowserPage() {
       {/* Section header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: "#999", margin: 0 }}>{sectionTitle}</h2>
-        <span style={{ fontSize: 11, color: "#444" }}>{displayMods.length} mods</span>
+        <span style={{ fontSize: 11, color: "#444" }}>
+          {mods.length} of {totalHits.toLocaleString()} mods
+        </span>
       </div>
 
-      {/* Results */}
-      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
-        {displayMods.length === 0 ? (
+      {/* Results with scroll */}
+      <div ref={scrollRef} onScroll={handleScroll}
+        style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+        {mods.length === 0 && !searching ? (
           <div style={{
             background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
             padding: "48px 20px", textAlign: "center",
@@ -151,20 +192,38 @@ export default function ModBrowserPage() {
               <circle cx="12" cy="12" r="9"/><line x1="18" y1="18" x2="25" y2="25"/>
             </svg>
             <p style={{ fontSize: 13, color: "#555" }}>
-              {searching ? "Searching..." : searched ? "No results found" : "Loading popular mods..."}
+              {searched ? "No results found" : "Loading popular mods..."}
             </p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {displayMods.map((mod) => (
-              <ModCard
-                key={mod.project_id}
-                mod={mod}
+            {mods.map((mod) => (
+              <ModCard key={mod.project_id} mod={mod}
                 installing={installing === mod.project_id}
                 installMsg={installing === mod.project_id ? installMsg : ""}
-                onInstall={() => handleInstall(mod.project_id, mod.title)}
+                onInstall={() => handleInstall(mod.project_id)}
+                onSelect={() => setSelectedMod(mod.project_id)}
               />
             ))}
+
+            {/* Load more / end indicator */}
+            {loadingMore ? (
+              <div style={{ padding: 20, textAlign: "center", fontSize: 12, color: "#555" }}>
+                Loading more...
+              </div>
+            ) : hasMore ? (
+              <button onClick={loadMore} style={{
+                padding: "12px 0", borderRadius: 10, fontSize: 13, fontWeight: 500,
+                background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888",
+                cursor: "pointer", width: "100%", marginTop: 4,
+              }}>
+                Load More ({totalHits - mods.length} remaining)
+              </button>
+            ) : mods.length > 0 ? (
+              <div style={{ padding: 16, textAlign: "center", fontSize: 11, color: "#333" }}>
+                End of results
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -172,22 +231,19 @@ export default function ModBrowserPage() {
   );
 }
 
-function ModCard({ mod, installing, installMsg, onInstall }: {
-  mod: ModrinthProject;
-  installing: boolean;
-  installMsg: string;
-  onInstall: () => void;
+function ModCard({ mod, installing, installMsg, onInstall, onSelect }: {
+  mod: ModrinthProject; installing: boolean; installMsg: string; onInstall: () => void; onSelect: () => void;
 }) {
   return (
     <div style={{
       background: "#131313", border: "1px solid #1e1e1e", borderRadius: 10,
       padding: 14, display: "flex", gap: 14, alignItems: "flex-start",
-      transition: "border-color 0.15s",
+      transition: "border-color 0.15s", cursor: "pointer",
     }}
+      onClick={onSelect}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2a2a2a"; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e1e"; }}
     >
-      {/* Icon */}
       {mod.icon_url ? (
         <img src={mod.icon_url} alt="" style={{
           width: 44, height: 44, borderRadius: 8, flexShrink: 0, objectFit: "cover",
@@ -199,8 +255,6 @@ function ModCard({ mod, installing, installMsg, onInstall }: {
           color: "#444", fontSize: 18, fontWeight: 700,
         }}>{mod.title.charAt(0)}</div>
       )}
-
-      {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#e5e5e5" }}>{mod.title}</span>
@@ -211,25 +265,22 @@ function ModCard({ mod, installing, installMsg, onInstall }: {
           overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box",
           WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
         }}>{mod.description}</p>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: 10, color: "#555" }}>
             {formatDownloads(mod.downloads)} downloads
           </span>
           {mod.categories.slice(0, 3).map((cat) => (
             <span key={cat} style={{
-              fontSize: 9, padding: "2px 8px", borderRadius: 10,
-              background: "#1a1a1a", color: "#666",
+              fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "#1a1a1a", color: "#666",
             }}>{cat}</span>
           ))}
         </div>
       </div>
-
-      {/* Install button */}
       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
         {installing ? (
-          <span style={{ fontSize: 11, color: "#f59e0b", whiteSpace: "nowrap" }}>{installMsg}</span>
+          <span style={{ fontSize: 11, color: "#f59e0b", whiteSpace: "nowrap", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}>{installMsg}</span>
         ) : (
-          <button onClick={onInstall} style={{
+          <button onClick={(e) => { e.stopPropagation(); onInstall(); }} style={{
             padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 600,
             background: "linear-gradient(135deg, #22c55e, #16a34a)",
             color: "#fff", border: "none", cursor: "pointer", whiteSpace: "nowrap",

@@ -42,6 +42,8 @@ pub fn run() {
             search_modrinth,
             get_trending_mods,
             install_mod_with_deps,
+            get_mod_detail,
+            get_mod_versions,
             get_server_properties,
             set_server_properties,
             send_server_command,
@@ -304,9 +306,10 @@ async fn toggle_mod(
 async fn search_modrinth(
     query: String,
     mc_version: String,
-) -> Result<Vec<mods::modrinth::ModrinthProject>, String> {
+    offset: Option<u32>,
+) -> Result<mods::modrinth::SearchResult, String> {
     let client = reqwest::Client::new();
-    mods::modrinth::search_mods(&client, &query, &mc_version)
+    mods::modrinth::search_mods(&client, &query, &mc_version, offset.unwrap_or(0), 20)
         .await
         .map_err(|e| e.to_string())
 }
@@ -314,9 +317,10 @@ async fn search_modrinth(
 #[tauri::command]
 async fn get_trending_mods(
     mc_version: String,
-) -> Result<Vec<mods::modrinth::ModrinthProject>, String> {
+    offset: Option<u32>,
+) -> Result<mods::modrinth::SearchResult, String> {
     let client = reqwest::Client::new();
-    mods::modrinth::get_trending_mods(&client, &mc_version)
+    mods::modrinth::get_trending_mods(&client, &mc_version, offset.unwrap_or(0), 20)
         .await
         .map_err(|e| e.to_string())
 }
@@ -334,6 +338,27 @@ async fn install_mod_with_deps(
         .join("mods");
     let client = reqwest::Client::new();
     mods::modrinth::install_mod_with_deps(&client, &project_id, &mc_version, &mods_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_mod_detail(
+    project_id: String,
+) -> Result<mods::modrinth::ModrinthProjectDetail, String> {
+    let client = reqwest::Client::new();
+    mods::modrinth::get_project_detail(&client, &project_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_mod_versions(
+    project_id: String,
+    mc_version: String,
+) -> Result<Vec<mods::modrinth::ModrinthVersion>, String> {
+    let client = reqwest::Client::new();
+    mods::modrinth::get_versions(&client, &project_id, &mc_version)
         .await
         .map_err(|e| e.to_string())
 }

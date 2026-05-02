@@ -47,6 +47,58 @@ pub struct ModrinthDependency {
     pub dependency_type: String, // "required", "optional", "incompatible"
 }
 
+/// Full project detail (from /project/{id} endpoint).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModrinthProjectDetail {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    pub body: String,                    // Full markdown description
+    pub icon_url: Option<String>,
+    pub downloads: u64,
+    pub followers: u64,
+    pub categories: Vec<String>,
+    pub client_side: String,
+    pub server_side: String,
+    pub license: Option<ModrinthLicense>,
+    pub source_url: Option<String>,
+    pub issues_url: Option<String>,
+    pub wiki_url: Option<String>,
+    pub discord_url: Option<String>,
+    pub donation_urls: Option<Vec<ModrinthDonation>>,
+    pub gallery: Option<Vec<ModrinthGalleryImage>>,
+    pub published: String,
+    pub updated: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModrinthLicense {
+    pub id: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModrinthDonation {
+    pub id: String,
+    pub platform: String,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModrinthGalleryImage {
+    pub url: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Paginated search result.
+#[derive(Clone, Debug, Serialize)]
+pub struct SearchResult {
+    pub mods: Vec<ModrinthProject>,
+    pub total_hits: u64,
+}
+
 /// Result of installing a mod with its dependencies.
 #[derive(Clone, Debug, Serialize)]
 pub struct InstallResult {
@@ -58,6 +110,7 @@ pub struct InstallResult {
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
     hits: Vec<SearchHit>,
+    total_hits: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,41 +136,73 @@ fn hit_to_project(h: SearchHit) -> ModrinthProject {
     }
 }
 
-/// Searches Modrinth for mods matching the query.
+/// Searches Modrinth for mods matching the query, with pagination.
 pub async fn search_mods(
     client: &reqwest::Client,
     query: &str,
     mc_version: &str,
-) -> Result<Vec<ModrinthProject>, LauncherError> {
+    offset: u32,
+    limit: u32,
+) -> Result<SearchResult, LauncherError> {
     let facets = format!(r#"[["versions:{}"],["project_type:mod"]]"#, mc_version);
+    let limit_str = limit.to_string();
+    let offset_str = offset.to_string();
 
     let response: SearchResponse = client
         .get(format!("{}/search", MODRINTH_API))
-        .query(&[("query", query), ("facets", &facets), ("limit", "20")])
+        .query(&[
+            ("query", query),
+            ("facets", facets.as_str()),
+            ("limit", limit_str.as_str()),
+            ("offset", offset_str.as_str()),
+        ])
         .header("User-Agent", USER_AGENT)
         .send().await?.json().await?;
 
-    Ok(response.hits.into_iter().map(hit_to_project).collect())
+    Ok(SearchResult {
+        mods: response.hits.into_iter().map(hit_to_project).collect(),
+        total_hits: response.total_hits,
+    })
 }
 
-/// Gets trending/popular mods for a MC version (shown before searching).
+/// Gets trending/popular mods for a MC version, with pagination.
 pub async fn get_trending_mods(
     client: &reqwest::Client,
     mc_version: &str,
-) -> Result<Vec<ModrinthProject>, LauncherError> {
+    offset: u32,
+    limit: u32,
+) -> Result<SearchResult, LauncherError> {
     let facets = format!(r#"[["versions:{}"],["project_type:mod"]]"#, mc_version);
+    let limit_str = limit.to_string();
+    let offset_str = offset.to_string();
 
     let response: SearchResponse = client
         .get(format!("{}/search", MODRINTH_API))
         .query(&[
             ("facets", facets.as_str()),
-            ("limit", "15"),
-            ("index", "downloads"),  // Sort by most downloaded
+            ("limit", limit_str.as_str()),
+            ("offset", offset_str.as_str()),
+            ("index", "downloads"),
         ])
         .header("User-Agent", USER_AGENT)
         .send().await?.json().await?;
 
-    Ok(response.hits.into_iter().map(hit_to_project).collect())
+    Ok(SearchResult {
+        mods: response.hits.into_iter().map(hit_to_project).collect(),
+        total_hits: response.total_hits,
+    })
+}
+
+/// Gets full project details from Modrinth.
+pub async fn get_project_detail(
+    client: &reqwest::Client,
+    project_id: &str,
+) -> Result<ModrinthProjectDetail, LauncherError> {
+    let detail: ModrinthProjectDetail = client
+        .get(format!("{}/project/{}", MODRINTH_API, project_id))
+        .header("User-Agent", USER_AGENT)
+        .send().await?.json().await?;
+    Ok(detail)
 }
 
 /// Gets available versions for a project filtered by MC version.
