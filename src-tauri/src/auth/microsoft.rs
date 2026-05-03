@@ -141,9 +141,16 @@ pub async fn wait_for_callback(
         .and_then(|query| {
             query.split('&')
                 .find(|p| p.starts_with("code="))
-                .map(|p| p.strip_prefix("code=").unwrap().to_string())
+                .map(|p| {
+                    let raw = p.strip_prefix("code=").unwrap();
+                    // URL-decode the code (replace %XX sequences)
+                    urldecoding(raw)
+                })
         })
-        .ok_or_else(|| LauncherError::Other("No auth code in callback".to_string()))?;
+        .ok_or_else(|| LauncherError::Other(format!(
+            "No auth code in callback. Request: {}",
+            request_line.trim()
+        )))?;
 
     // Send a response to the browser
     let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
@@ -305,4 +312,25 @@ pub fn load_account(data_dir: &std::path::Path) -> Option<MinecraftAccount> {
 
 fn urlencoding(s: &str) -> String {
     s.replace(':', "%3A").replace('/', "%2F").replace(' ', "+")
+}
+
+fn urldecoding(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                result.push(byte as char);
+            } else {
+                result.push('%');
+                result.push_str(&hex);
+            }
+        } else if c == '+' {
+            result.push(' ');
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
