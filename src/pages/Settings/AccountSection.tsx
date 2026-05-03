@@ -20,18 +20,27 @@ export default function AccountSection() {
   const [loginState, setLoginState] = useState<"idle" | "waiting">("idle");
   const [error, setError] = useState("");
 
-  useEffect(() => { loadAccount(); }, []);
+  useEffect(() => {
+    // Clear any stale error on mount
+    setError("");
+    loadAccount();
+  }, []);
 
   async function loadAccount() {
     try {
       const acc = await invoke<MinecraftAccount | null>("get_account");
-      if (!acc) return;
+      if (!acc) return; // No saved account — normal, no error
       setAccount(acc);
+      // Only try refresh if we have an account
       try {
         const refreshed = await invoke<MinecraftAccount | null>("refresh_account");
         if (refreshed) setAccount(refreshed);
-      } catch {}
-    } catch {}
+      } catch {
+        // Refresh failed — keep showing cached account, don't show error
+      }
+    } catch {
+      // get_account failed — don't show error, just means no account
+    }
   }
 
   async function startLogin() {
@@ -42,14 +51,23 @@ export default function AccountSection() {
       const info = await invoke<LoginStartInfo>("start_ms_login");
 
       // Step 2: Open system browser to Microsoft login
-      await open(info.auth_url);
+      try {
+        await open(info.auth_url);
+      } catch {
+        // Fallback if shell plugin fails
+        window.location.href = info.auth_url;
+      }
 
-      // Step 3: Wait for callback (this blocks until user completes login)
-      const account = await invoke<MinecraftAccount>("complete_ms_login", { port: info.port });
-      setAccount(account);
+      // Step 3: Wait for callback (this blocks until user completes login in browser)
+      const result = await invoke<MinecraftAccount>("complete_ms_login", { port: info.port });
+      setAccount(result);
       setLoginState("idle");
     } catch (e: any) {
-      setError(String(e));
+      const msg = String(e);
+      // Don't show error for cancelled/timeout
+      if (!msg.includes("No pending login")) {
+        setError(msg);
+      }
       setLoginState("idle");
     }
   }
