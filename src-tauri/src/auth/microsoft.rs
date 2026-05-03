@@ -229,7 +229,7 @@ pub async fn authenticate_minecraft(
     ms_refresh_token: &str,
 ) -> Result<MinecraftAccount, LauncherError> {
     // Xbox Live
-    let xbox: XboxResponse = client
+    let xbox_body = client
         .post(XBOX_AUTH_URL)
         .json(&serde_json::json!({
             "Properties": {
@@ -243,13 +243,18 @@ pub async fn authenticate_minecraft(
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .send().await?
-        .json().await?;
+        .text().await?;
+
+    let xbox: XboxResponse = serde_json::from_str(&xbox_body)
+        .map_err(|e| LauncherError::Other(format!(
+            "Xbox Live auth failed: {} — response: {}", e, &xbox_body[..xbox_body.len().min(300)]
+        )))?;
 
     let uhs = xbox.display_claims.xui.first()
         .map(|x| x.uhs.clone()).unwrap_or_default();
 
     // XSTS
-    let xsts: XboxResponse = client
+    let xsts_body = client
         .post(XSTS_AUTH_URL)
         .json(&serde_json::json!({
             "Properties": {
@@ -262,23 +267,38 @@ pub async fn authenticate_minecraft(
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .send().await?
-        .json().await?;
+        .text().await?;
+
+    let xsts: XboxResponse = serde_json::from_str(&xsts_body)
+        .map_err(|e| LauncherError::Other(format!(
+            "XSTS auth failed: {} — response: {}", e, &xsts_body[..xsts_body.len().min(300)]
+        )))?;
 
     // Minecraft
-    let mc_auth: McAuthResponse = client
+    let mc_body = client
         .post(MC_AUTH_URL)
         .json(&serde_json::json!({
             "identityToken": format!("XBL3.0 x={};{}", uhs, xsts.token),
         }))
         .send().await?
-        .json().await?;
+        .text().await?;
+
+    let mc_auth: McAuthResponse = serde_json::from_str(&mc_body)
+        .map_err(|e| LauncherError::Other(format!(
+            "MC auth failed: {} — response: {}", e, &mc_body[..mc_body.len().min(300)]
+        )))?;
 
     // Profile
-    let profile: McProfile = client
+    let profile_text = client
         .get(MC_PROFILE_URL)
         .header("Authorization", format!("Bearer {}", mc_auth.access_token))
         .send().await?
-        .json().await?;
+        .text().await?;
+
+    let profile: McProfile = serde_json::from_str(&profile_text)
+        .map_err(|e| LauncherError::Other(format!(
+            "MC profile failed: {} — response: {}", e, &profile_text[..profile_text.len().min(300)]
+        )))?;
 
     let skin_url = profile.skins.and_then(|s| s.first().map(|s| s.url.clone()));
     let expiry = chrono::Utc::now().timestamp() + mc_auth.expires_in as i64;
