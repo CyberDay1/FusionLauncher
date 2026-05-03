@@ -32,13 +32,18 @@ export default function AccountSection() {
   async function loadAccount() {
     try {
       const acc = await invoke<MinecraftAccount | null>("get_account");
+      if (!acc) return; // No saved account — that's fine
       setAccount(acc);
       // Try to refresh if expired
-      if (acc) {
+      try {
         const refreshed = await invoke<MinecraftAccount | null>("refresh_account");
         if (refreshed) setAccount(refreshed);
+      } catch {
+        // Refresh failed — token might be expired, still show cached account
       }
-    } catch {}
+    } catch {
+      // No account saved — normal state
+    }
   }
 
   async function startLogin() {
