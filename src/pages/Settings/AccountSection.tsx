@@ -19,56 +19,45 @@ export default function AccountSection() {
   const [account, setAccount] = useState<MinecraftAccount | null>(null);
   const [loginState, setLoginState] = useState<"idle" | "waiting">("idle");
   const [error, setError] = useState("");
+  const [userClickedLogin, setUserClickedLogin] = useState(false);
 
   useEffect(() => {
-    // Clear any stale error on mount
-    setError("");
     loadAccount();
   }, []);
 
   async function loadAccount() {
+    // Silently try to load — never show errors from this
     try {
       const acc = await invoke<MinecraftAccount | null>("get_account");
-      if (!acc) return; // No saved account — normal, no error
-      setAccount(acc);
-      // Only try refresh if we have an account
-      try {
-        const refreshed = await invoke<MinecraftAccount | null>("refresh_account");
-        if (refreshed) setAccount(refreshed);
-      } catch {
-        // Refresh failed — keep showing cached account, don't show error
-      }
+      if (acc) setAccount(acc);
     } catch {
-      // get_account failed — don't show error, just means no account
+      // Completely silent — no account is the normal state
     }
   }
 
   async function startLogin() {
     setError("");
+    setUserClickedLogin(true);
     setLoginState("waiting");
     try {
-      // Step 1: Get auth URL + local port
       const info = await invoke<LoginStartInfo>("start_ms_login");
 
-      // Step 2: Open system browser to Microsoft login
       try {
         await open(info.auth_url);
       } catch {
-        // Fallback if shell plugin fails
-        window.location.href = info.auth_url;
+        // If shell.open fails, the user can manually navigate
       }
 
-      // Step 3: Wait for callback (this blocks until user completes login in browser)
       const result = await invoke<MinecraftAccount>("complete_ms_login", { port: info.port });
       setAccount(result);
       setLoginState("idle");
+      setError("");
     } catch (e: any) {
-      const msg = String(e);
-      // Don't show error for cancelled/timeout
-      if (!msg.includes("No pending login")) {
-        setError(msg);
-      }
       setLoginState("idle");
+      // Only show error if the user explicitly clicked login
+      if (userClickedLogin) {
+        setError(String(e));
+      }
     }
   }
 
@@ -76,6 +65,7 @@ export default function AccountSection() {
     try {
       await invoke("logout");
       setAccount(null);
+      setError("");
     } catch {}
   }
 
@@ -119,7 +109,7 @@ export default function AccountSection() {
           <p style={{ fontSize: 13, color: "#888", marginBottom: 14 }}>
             Sign in with your Microsoft account to play online and download Minecraft.
           </p>
-          {error && (
+          {error && userClickedLogin && (
             <div style={{
               fontSize: 12, color: "#ef4444", marginBottom: 10,
               padding: "8px 12px", background: "#ef444410", borderRadius: 6,
@@ -136,12 +126,10 @@ export default function AccountSection() {
                   Complete login in your browser...
                 </div>
                 <div style={{ fontSize: 11, color: "#555" }}>
-                  A browser window should have opened. Sign in with your Microsoft account.
+                  Sign in with your Microsoft account in the browser window.
                 </div>
               </div>
-              <div style={{
-                height: 3, borderRadius: 2, background: "#1a1a1a", overflow: "hidden",
-              }}>
+              <div style={{ height: 3, borderRadius: 2, background: "#1a1a1a", overflow: "hidden" }}>
                 <div style={{
                   height: "100%", background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
                   width: "30%",
