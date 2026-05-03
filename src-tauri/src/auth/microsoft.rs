@@ -90,6 +90,9 @@ struct McSkin {
     url: String,
 }
 
+// Store the listener between start_login and wait_for_callback
+static PENDING_LISTENER: std::sync::Mutex<Option<TcpListener>> = std::sync::Mutex::new(None);
+
 /// Starts the OAuth login flow. Returns the URL to open in browser and the
 /// local port the callback server is listening on.
 pub fn start_login() -> Result<LoginStartInfo, LauncherError> {
@@ -105,23 +108,22 @@ pub fn start_login() -> Result<LoginStartInfo, LauncherError> {
         urlencoding("XboxLive.signin offline_access"),
     );
 
-    // Store the listener for the callback handler
-    // We'll handle it in wait_for_callback
-    std::mem::forget(listener); // Keep it alive — we'll rebind in wait_for_callback
+    // Store the listener for wait_for_callback to pick up
+    *PENDING_LISTENER.lock().unwrap() = Some(listener);
 
     Ok(LoginStartInfo { auth_url, port })
 }
 
-/// Waits for the OAuth callback on the given port and completes the full auth chain.
+/// Waits for the OAuth callback on the stored listener and completes the full auth chain.
 pub async fn wait_for_callback(
     client: &reqwest::Client,
     port: u16,
 ) -> Result<MinecraftAccount, LauncherError> {
     let redirect_uri = format!("http://localhost:{}", port);
 
-    // Listen for the callback
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", port))?;
-    listener.set_nonblocking(false)?;
+    // Take the listener from the stored state
+    let listener = PENDING_LISTENER.lock().unwrap().take()
+        .ok_or_else(|| LauncherError::Other("No pending login — call start_ms_login first".to_string()))?;
 
     let (mut stream, _) = listener.accept()?;
 

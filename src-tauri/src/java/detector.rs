@@ -59,9 +59,17 @@ fn probe_java_dir(dir: &Path) -> Option<JavaRuntime> {
 
 /// Probes a specific java executable to get version info.
 fn probe_java_executable(java_path: &Path) -> Option<JavaRuntime> {
-    let output = Command::new(java_path)
-        .arg("-version")
-        .output()
+    let mut cmd = Command::new(java_path);
+    cmd.arg("-version");
+
+    // Hide console window on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd.output()
         .ok()?;
 
     // java -version outputs to stderr
