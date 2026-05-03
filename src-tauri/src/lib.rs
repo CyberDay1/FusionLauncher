@@ -526,7 +526,7 @@ async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// --- Microsoft Auth (device code flow) ---
+// --- Microsoft Auth (auth code flow with localhost redirect) ---
 
 #[tauri::command]
 async fn start_ms_login() -> Result<auth::microsoft::DeviceCodeInfo, String> {
