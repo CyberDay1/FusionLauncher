@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 
 interface MinecraftAccount {
   username: string;
@@ -40,8 +41,8 @@ export default function AccountSection() {
       // Step 1: Get auth URL + local port
       const info = await invoke<LoginStartInfo>("start_ms_login");
 
-      // Step 2: Open browser to Microsoft login
-      window.open(info.auth_url, "_blank");
+      // Step 2: Open system browser to Microsoft login
+      await open(info.auth_url);
 
       // Step 3: Wait for callback (this blocks until user completes login)
       const account = await invoke<MinecraftAccount>("complete_ms_login", { port: info.port });
