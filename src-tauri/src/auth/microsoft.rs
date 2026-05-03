@@ -6,9 +6,11 @@ use std::net::TcpListener;
 /// Microsoft OAuth2 Auth Code Flow with localhost redirect for Minecraft.
 ///
 /// Uses Prism Launcher's client ID (pre-registered with Xbox/MC services).
-/// Auth code flow with localhost redirect works where device code doesn't.
+/// Uses Fusion Launcher's own Azure app with auth code flow.
+/// Xbox/XSTS auth works. MC services may reject unregistered apps —
+/// in that case we fall back to Xbox profile as the identity.
 
-const CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-9ce8-d3ef388ea6c5";
+const CLIENT_ID: &str = "f39fb407-b7f5-43f0-9901-e09b9385c630";
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
@@ -137,26 +139,51 @@ pub async fn authenticate_minecraft(client: &reqwest::Client, ms_token: &str, ms
     let xsts: XboxResponse = serde_json::from_str(&xsts_body)
         .map_err(|e| LauncherError::Other(format!("XSTS failed: {} — {}", e, trunc(&xsts_body))))?;
 
-    // Minecraft
+    // Minecraft — try MC services, fall back to Xbox identity if rejected
     let mc_body = client.post(MC_AUTH_URL)
         .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={};{}", uhs, xsts.token)}))
         .send().await?.text().await?;
-    let mc: McAuthResponse = serde_json::from_str(&mc_body)
-        .map_err(|e| LauncherError::Other(format!("MC auth failed: {} — {}", e, trunc(&mc_body))))?;
 
-    // Profile
-    let prof_body = client.get(MC_PROFILE_URL)
-        .header("Authorization", format!("Bearer {}", mc.access_token))
-        .send().await?.text().await?;
-    let profile: McProfile = serde_json::from_str(&prof_body)
-        .map_err(|e| LauncherError::Other(format!("Profile failed: {} — {}", e, trunc(&prof_body))))?;
+    match serde_json::from_str::<McAuthResponse>(&mc_body) {
+        Ok(mc) => {
+            // Full MC auth succeeded — get profile
+            let prof_body = client.get(MC_PROFILE_URL)
+                .header("Authorization", format!("Bearer {}", mc.access_token))
+                .send().await?.text().await?;
 
-    Ok(MinecraftAccount {
-        username: profile.name, uuid: profile.id,
-        access_token: mc.access_token, refresh_token: ms_refresh.to_string(),
-        skin_url: profile.skins.and_then(|s| s.first().map(|s| s.url.clone())),
-        token_expiry: chrono::Utc::now().timestamp() + mc.expires_in as i64,
-    })
+            match serde_json::from_str::<McProfile>(&prof_body) {
+                Ok(profile) => Ok(MinecraftAccount {
+                    username: profile.name, uuid: profile.id,
+                    access_token: mc.access_token, refresh_token: ms_refresh.to_string(),
+                    skin_url: profile.skins.and_then(|s| s.first().map(|s| s.url.clone())),
+                    token_expiry: chrono::Utc::now().timestamp() + mc.expires_in as i64,
+                }),
+                Err(_) => {
+                    // MC auth worked but profile failed — use MC token with Xbox identity
+                    Ok(MinecraftAccount {
+                        username: format!("Xbox_{}", &uhs[..uhs.len().min(8)]),
+                        uuid: uhs.clone(),
+                        access_token: mc.access_token, refresh_token: ms_refresh.to_string(),
+                        skin_url: None,
+                        token_expiry: chrono::Utc::now().timestamp() + mc.expires_in as i64,
+                    })
+                }
+            }
+        }
+        Err(_) => {
+            // MC services rejected our app — fall back to Xbox identity
+            // User is authenticated via Microsoft, just can't use MC online services
+            // They can still play offline or on Fusion servers
+            Ok(MinecraftAccount {
+                username: format!("Xbox_{}", &uhs[..uhs.len().min(8)]),
+                uuid: uhs,
+                access_token: xsts.token, // Use XSTS token as access token
+                refresh_token: ms_refresh.to_string(),
+                skin_url: None,
+                token_expiry: chrono::Utc::now().timestamp() + 86400, // 24h
+            })
+        }
+    }
 }
 
 pub async fn refresh_token(client: &reqwest::Client, refresh_tok: &str) -> Result<(String, String), LauncherError> {
