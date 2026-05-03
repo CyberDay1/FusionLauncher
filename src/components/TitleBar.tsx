@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import AccountBadge from "./AccountBadge";
 
 function getWindow() {
   return getCurrentWindow();
@@ -38,10 +39,11 @@ export default function TitleBar() {
       data-tauri-drag-region
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        height: 36, paddingLeft: 12, background: "#0a0a0a",
+        height: 40, paddingLeft: 12, background: "#0a0a0a",
         borderBottom: "1px solid #1a1a1a", userSelect: "none", flexShrink: 0,
       }}
     >
+      {/* Left: app name */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }} data-tauri-drag-region>
         <div style={{
           width: 16, height: 16, borderRadius: 4,
@@ -52,7 +54,18 @@ export default function TitleBar() {
         </span>
         <span style={{ color: "#3f3f46", fontSize: 10 }}>v0.1.0</span>
       </div>
-      <div style={{ display: "flex", alignItems: "center" }}>
+
+      {/* Right: account + window controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+        {/* Account badge */}
+        <div style={{ marginRight: 8 }}>
+          <AccountBadge />
+        </div>
+
+        {/* Separator */}
+        <div style={{ width: 1, height: 18, background: "#1e1e1e", marginRight: 4 }} />
+
+        {/* Window controls */}
         <WinBtn onClick={() => getWindow().minimize()} hoverBg="#252525">
           <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor"><rect width="10" height="1" /></svg>
         </WinBtn>

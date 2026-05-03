@@ -17,66 +17,46 @@ export default function AccountBadge() {
     invoke<MinecraftAccount | null>("get_account").then(setAccount).catch(() => {});
   }, []);
 
+  const base: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: 6,
+    padding: "3px 10px 3px 3px", borderRadius: 6,
+    background: hover ? "#1a1a1a" : "transparent",
+    border: "none", cursor: "pointer",
+    transition: "background 0.15s",
+  };
+
   if (!account) {
-    // Not logged in — show sign in button
     return (
-      <button
-        onClick={() => navigate("/settings")}
+      <button onClick={() => navigate("/settings")}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8,
-          padding: "6px 14px", borderRadius: 8,
-          background: hover ? "#1e1e1e" : "#151515",
-          border: "1px solid #2a2a2a",
-          color: "#888", fontSize: 12, cursor: "pointer",
-          transition: "background 0.15s, border-color 0.15s",
-          borderColor: hover ? "#3a3a3a" : "#2a2a2a",
-        }}
+        style={{ ...base, padding: "3px 10px", gap: 5 }}
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
-          <circle cx="7" cy="5" r="3" />
-          <path d="M1 13 C1 10 4 8 7 8 C10 8 13 10 13 13" />
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#666" strokeWidth="1.2">
+          <circle cx="6" cy="4.5" r="2.5" /><path d="M1 11 C1 8.5 3.5 7 6 7 C8.5 7 11 8.5 11 11" />
         </svg>
-        Sign In
+        <span style={{ fontSize: 11, color: "#666" }}>Sign In</span>
       </button>
     );
   }
 
-  // Logged in — show skin head + username
   return (
-    <button
-      onClick={() => navigate("/settings")}
+    <button onClick={() => navigate("/settings")}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex", alignItems: "center", gap: 8,
-        padding: "4px 12px 4px 4px", borderRadius: 8,
-        background: hover ? "#1e1e1e" : "#151515",
-        border: "1px solid #2a2a2a",
-        cursor: "pointer",
-        transition: "background 0.15s, border-color 0.15s",
-        borderColor: hover ? "#3a3a3a" : "#2a2a2a",
-      }}
+      style={base}
     >
-      {/* Skin head */}
       <img
-        src={`https://mc-heads.net/avatar/${account.uuid}/28`}
+        src={`https://mc-heads.net/avatar/${account.uuid}/22`}
         alt=""
-        style={{
-          width: 28, height: 28, borderRadius: 6,
-          imageRendering: "pixelated",
-        }}
+        style={{ width: 22, height: 22, borderRadius: 4, imageRendering: "pixelated" }}
         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
       />
-      <span style={{ fontSize: 12, fontWeight: 600, color: "#d1d5db" }}>
-        {account.username}
-      </span>
-      {/* Online indicator */}
+      <span style={{ fontSize: 11, fontWeight: 600, color: "#b0b0b0" }}>{account.username}</span>
       <div style={{
-        width: 6, height: 6, borderRadius: "50%",
+        width: 5, height: 5, borderRadius: "50%",
         background: "#22c55e",
-        boxShadow: "0 0 6px rgba(34,197,94,0.5)",
+        boxShadow: "0 0 4px rgba(34,197,94,0.5)",
       }} />
     </button>
   );
