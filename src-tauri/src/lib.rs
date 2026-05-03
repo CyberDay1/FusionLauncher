@@ -59,6 +59,10 @@ pub fn run() {
             get_account,
             logout,
             refresh_account,
+            detect_installs,
+            quick_play,
+            check_mod_updates,
+            apply_mod_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fusion Launcher");
@@ -606,4 +610,90 @@ async fn refresh_account(
         .map_err(|e| e.to_string())?;
 
     Ok(Some(refreshed))
+}
+
+// --- Instance import ---
+
+#[tauri::command]
+async fn detect_installs() -> Result<Vec<instance::import::DetectedInstall>, String> {
+    Ok(instance::import::detect_installations())
+}
+
+// --- Quick Play (Home page Play Client button) ---
+
+#[tauri::command]
+async fn quick_play(
+    state: tauri::State<'_, AppState>,
+    instance_type: String,
+) -> Result<String, String> {
+    // Find or create a default instance — returns the instance ID
+    // Frontend will then call install_instance + launch_instance
+    let inst_type_filter = if instance_type == "server" { "Server" } else { "Client" };
+
+    // Look for existing instance of the right type
+    {
+        let instances = state.instances.read().map_err(|e| e.to_string())?;
+        if let Some(existing) = instances.values().find(|i| i.instance_type.to_string() == inst_type_filter) {
+            return Ok(existing.id.clone());
+        }
+    }
+
+    // No instance exists — create one
+    let name = if instance_type == "server" { "My Server" } else { "My Client" };
+    let inst_type = if instance_type == "server" { instance::config::InstanceType::Server } else { instance::config::InstanceType::Client };
+    let config = instance::config::InstanceConfig::new(
+        name.to_string(), inst_type, "26.1.2".to_string(), "0.1.0-alpha.1".to_string()
+    );
+
+    let inst_dir = state.instances_dir().join(&config.id);
+    let game_dir = inst_dir.join(".minecraft");
+    std::fs::create_dir_all(game_dir.join("mods")).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(game_dir.join("config")).map_err(|e| e.to_string())?;
+
+    let config_path = inst_dir.join("instance.json");
+    std::fs::write(&config_path, serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    let id = config.id.clone();
+    state.instances.write().map_err(|e| e.to_string())?.insert(id.clone(), config);
+
+    Ok(id)
+}
+
+// --- Mod update checker ---
+
+#[tauri::command]
+async fn check_mod_updates(
+    state: tauri::State<'_, AppState>,
+    instance_id: String,
+    mc_version: String,
+) -> Result<Vec<mods::updates::ModUpdate>, String> {
+    let mods_dir = state.instances_dir().join(&instance_id).join(".minecraft").join("mods");
+    let installed = mods::scanner::scan_mods_directory(&mods_dir).map_err(|e| e.to_string())?;
+    let client = reqwest::Client::new();
+    mods::updates::check_for_updates(&client, &installed, &mc_version).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn apply_mod_update(
+    state: tauri::State<'_, AppState>,
+    instance_id: String,
+    filename: String,
+    url: String,
+    new_filename: String,
+) -> Result<(), String> {
+    let mods_dir = state.instances_dir().join(&instance_id).join(".minecraft").join("mods");
+    let client = reqwest::Client::new();
+
+    // Download new
+    crate::minecraft::downloader::download_file(&client, &url, &mods_dir.join(&new_filename))
+        .await.map_err(|e| e.to_string())?;
+
+    // Remove old
+    let old = mods_dir.join(&filename);
+    if old.exists() && filename != new_filename {
+        std::fs::remove_file(&old).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

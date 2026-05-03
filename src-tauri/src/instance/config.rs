@@ -71,6 +71,15 @@ pub enum InstanceType {
     Server,
 }
 
+impl std::fmt::Display for InstanceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstanceType::Client => write!(f, "Client"),
+            InstanceType::Server => write!(f, "Server"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum InstallStatus {
     /// Not yet installed — needs full download

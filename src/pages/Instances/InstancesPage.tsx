@@ -32,10 +32,12 @@ export default function InstancesPage() {
   const [newVersion, setNewVersion] = useState("26.1.2");
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
+  const [mcVersions, setMcVersions] = useState<string[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     loadInstances();
+    loadMcVersions();
     const unlisten = listen("install-progress", (e: any) => {
       setProgress(`${e.payload.step}: ${e.payload.percent?.toFixed(0)}%`);
     });
@@ -46,6 +48,13 @@ export default function InstancesPage() {
     try {
       const list = await invoke<InstanceConfig[]>("list_instances");
       setInstances(list);
+    } catch {}
+  }
+
+  async function loadMcVersions() {
+    try {
+      const versions = await invoke<{ id: string }[]>("get_mc_versions");
+      setMcVersions(versions.map(v => v.id));
     } catch {}
   }
 
@@ -92,8 +101,14 @@ export default function InstancesPage() {
               <option value="client">Client</option>
               <option value="server">Server</option>
             </select>
-            <input type="text" value={newVersion} placeholder="MC version"
-              onChange={(e) => setNewVersion(e.target.value)} style={{ ...input, width: 120 }} />
+            <select value={newVersion} onChange={(e) => setNewVersion(e.target.value)}
+              style={{ ...input, width: 140, cursor: "pointer" }}>
+              {mcVersions.length > 0 ? mcVersions.map(v => (
+                <option key={v} value={v}>{v}</option>
+              )) : (
+                <option value="26.1.2">26.1.2</option>
+              )}
+            </select>
             <button onClick={handleCreate}
               style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
               Create

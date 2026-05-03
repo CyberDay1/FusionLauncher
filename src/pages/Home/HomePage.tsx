@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+// useNavigate available if needed
 
 interface UpdateInfo {
   available: boolean;
@@ -25,6 +26,7 @@ export default function HomePage() {
   const [checkingUpdate, setCheckingUpdate] = useState(true);
   const [heroExpanded, setHeroExpanded] = useState(false);
   const [instances, setInstances] = useState<InstanceConfig[]>([]);
+  const [launching, setLaunching] = useState("");
 
   useEffect(() => {
     checkForUpdates();
@@ -45,6 +47,20 @@ export default function HomePage() {
       const list = await invoke<InstanceConfig[]>("list_instances");
       setInstances(list);
     } catch {}
+  }
+
+  async function handleQuickPlay(type: string) {
+    setLaunching(type);
+    try {
+      const instanceId = await invoke<string>("quick_play", { instanceType: type });
+      // Install if needed
+      await invoke("install_instance", { instanceId });
+      // Launch
+      await invoke("launch_instance", { instanceId });
+    } catch (e: any) {
+      console.error("Quick play failed:", e);
+    }
+    setLaunching("");
   }
 
   return (
@@ -131,21 +147,22 @@ export default function HomePage() {
 
           {/* Buttons */}
           <div style={{ display: "flex", gap: 10, marginTop: heroExpanded ? 20 : 14 }}>
-            <button style={{
+            <button onClick={() => handleQuickPlay("client")} disabled={!!launching} style={{
               padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
-              boxShadow: "0 4px 20px rgba(99,102,241,0.35)",
-              color: "#fff", border: "none", cursor: "pointer",
+              background: launching === "client" ? "#333" : "linear-gradient(135deg, #6366f1, #4f46e5)",
+              boxShadow: launching ? "none" : "0 4px 20px rgba(99,102,241,0.35)",
+              color: "#fff", border: "none", cursor: launching ? "wait" : "pointer",
               display: "flex", alignItems: "center", gap: 8,
             }}>
               <svg width="10" height="12" viewBox="0 0 10 12" fill="white"><path d="M0 0 L10 6 L0 12 Z"/></svg>
-              Play Client
+              {launching === "client" ? "Launching..." : "Play Client"}
             </button>
-            <button style={{
+            <button onClick={() => handleQuickPlay("server")} disabled={!!launching} style={{
               padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-              color: "#999", cursor: "pointer",
-            }}>Start Server</button>
+              background: launching === "server" ? "#333" : "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "#999", cursor: launching ? "wait" : "pointer",
+            }}>{launching === "server" ? "Starting..." : "Start Server"}</button>
           </div>
         </div>
       </div>
