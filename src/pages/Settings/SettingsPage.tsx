@@ -1,4 +1,5 @@
 import { useState } from "react";
+import AccountSection from "./AccountSection";
 
 const sectionStyle: React.CSSProperties = {
   background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 20,
@@ -18,6 +19,9 @@ export default function SettingsPage() {
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", overflowY: "auto", height: "100%" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Settings</h1>
+
+      {/* Microsoft Account */}
+      <AccountSection />
 
       {/* Java Runtime */}
       <div style={sectionStyle}>

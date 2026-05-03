@@ -9,6 +9,7 @@ pub mod mods;
 pub mod server;
 pub mod backup;
 pub mod system;
+pub mod auth;
 
 use instance::config::{InstanceConfig, InstanceType};
 use java::runtime::JavaRuntime;
@@ -52,6 +53,11 @@ pub fn run() {
             check_for_updates,
             get_instance_thumbnail,
             quit_app,
+            start_ms_login,
+            poll_ms_login,
+            get_account,
+            logout,
+            refresh_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fusion Launcher");
@@ -189,9 +195,15 @@ async fn launch_instance(
             .path.clone()
     };
 
+    // Load account for auth
+    let account = auth::microsoft::load_account(&state.data_dir);
+
     // Build and spawn the process
     let mut cmd = process::launcher::ProcessLauncher::build_command(
-        &config, &game_dir, &libraries_dir, &java_path, &assets_dir
+        &config, &game_dir, &libraries_dir, &java_path, &assets_dir,
+        account.as_ref().map(|a| a.username.as_str()),
+        account.as_ref().map(|a| a.uuid.as_str()),
+        account.as_ref().map(|a| a.access_token.as_str()),
     ).map_err(|e| e.to_string())?;
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn: {}", e))?;
@@ -511,4 +523,104 @@ async fn get_instance_thumbnail(
 async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     app.exit(0);
     Ok(())
+}
+
+// --- Microsoft Auth ---
+
+// Store the device code between start and poll calls
+static DEVICE_CODE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+async fn start_ms_login() -> Result<auth::microsoft::DeviceCodeInfo, String> {
+    let client = reqwest::Client::new();
+    let (device_code, info) = auth::microsoft::request_device_code(&client)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    *DEVICE_CODE.lock().unwrap() = Some(device_code);
+    Ok(info)
+}
+
+#[tauri::command]
+async fn poll_ms_login(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<auth::microsoft::MinecraftAccount>, String> {
+    let device_code = {
+        let lock = DEVICE_CODE.lock().unwrap();
+        lock.clone().ok_or("No login in progress".to_string())?
+    };
+
+    let client = reqwest::Client::new();
+
+    // Poll for MS token
+    let tokens = auth::microsoft::poll_for_token(&client, &device_code)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (ms_token, ms_refresh) = match tokens {
+        None => return Ok(None), // Still waiting for user
+        Some(t) => t,
+    };
+
+    // Clear device code
+    *DEVICE_CODE.lock().unwrap() = None;
+
+    // Exchange through the full chain: MS -> Xbox -> XSTS -> MC
+    let account = auth::microsoft::authenticate_minecraft(&client, &ms_token, &ms_refresh)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Save to disk
+    auth::microsoft::save_account(&state.data_dir, &account)
+        .map_err(|e| e.to_string())?;
+
+    Ok(Some(account))
+}
+
+#[tauri::command]
+async fn get_account(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<auth::microsoft::MinecraftAccount>, String> {
+    Ok(auth::microsoft::load_account(&state.data_dir))
+}
+
+#[tauri::command]
+async fn logout(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let path = state.data_dir.join("account.json");
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn refresh_account(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<auth::microsoft::MinecraftAccount>, String> {
+    let existing = auth::microsoft::load_account(&state.data_dir);
+    let account = match existing {
+        None => return Ok(None),
+        Some(a) => a,
+    };
+
+    if auth::microsoft::is_token_valid(&account) {
+        return Ok(Some(account));
+    }
+
+    // Token expired — refresh
+    let client = reqwest::Client::new();
+    let (new_ms_token, new_refresh) = auth::microsoft::refresh_token(&client, &account.refresh_token)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let refreshed = auth::microsoft::authenticate_minecraft(&client, &new_ms_token, &new_refresh)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    auth::microsoft::save_account(&state.data_dir, &refreshed)
+        .map_err(|e| e.to_string())?;
+
+    Ok(Some(refreshed))
 }

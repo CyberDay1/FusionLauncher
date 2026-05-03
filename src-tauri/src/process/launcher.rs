@@ -17,6 +17,9 @@ impl ProcessLauncher {
         libraries_dir: &Path,
         java_path: &Path,
         assets_dir: &Path,
+        username: Option<&str>,
+        uuid: Option<&str>,
+        access_token: Option<&str>,
     ) -> Result<Command, LauncherError> {
         let mut cmd = Command::new(java_path);
 
@@ -77,11 +80,15 @@ impl ProcessLauncher {
             cmd.arg("--assetIndex");
             cmd.arg(derive_asset_index(&instance.minecraft_version));
 
-            // Auth (offline mode for now)
+            // Auth
             cmd.arg("--accessToken");
-            cmd.arg("0");
+            cmd.arg(access_token.unwrap_or("0"));
             cmd.arg("--username");
-            cmd.arg("Player");
+            cmd.arg(username.unwrap_or("Player"));
+            if let Some(uid) = uuid {
+                cmd.arg("--uuid");
+                cmd.arg(uid);
+            }
         }
 
         // User-specified game args
