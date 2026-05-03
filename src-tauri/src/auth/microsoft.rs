@@ -15,10 +15,8 @@ use std::net::TcpListener;
 /// 7. Exchange XSTS token for Minecraft access token
 /// 8. Fetch Minecraft profile (username, UUID, skin)
 
-// Azure AD app client ID — needs to be registered at https://portal.azure.com
-// For now, we'll use a placeholder that prompts the user to register their own
-// or we can register one for Fusion Launcher
-const CLIENT_ID: &str = "1fec8e78-bce4-4aaf-ab1b-5451cc387264"; // Minecraft launcher public client
+// Fusion Launcher Azure AD app — registered for personal Microsoft accounts
+const CLIENT_ID: &str = "f39fb407-b7f5-43f0-9901-e09b9385c630";
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
