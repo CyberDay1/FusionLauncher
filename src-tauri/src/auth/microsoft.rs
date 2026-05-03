@@ -1,29 +1,30 @@
 use crate::error::LauncherError;
 use serde::{Deserialize, Serialize};
+use std::io::{BufRead, Write};
+use std::net::TcpListener;
 
-/// Microsoft OAuth2 Device Code Flow for Minecraft authentication.
+/// Microsoft OAuth2 Authorization Code Flow with localhost redirect.
 ///
 /// Flow:
-/// 1. Request device code from Microsoft
-/// 2. User opens browser, enters code at microsoft.com/link
-/// 3. Poll for token completion
-/// 4. Exchange MS token for Xbox Live token
-/// 5. Exchange Xbox Live token for XSTS token
-/// 6. Exchange XSTS token for Minecraft access token
-/// 7. Fetch Minecraft profile (username, UUID, skin)
-///
-/// Uses the public client ID that other launchers use (no client secret needed).
+/// 1. Start a local HTTP server on a random port
+/// 2. Open browser to Microsoft login with redirect_uri=http://localhost:PORT
+/// 3. User signs in, Microsoft redirects to localhost with auth code
+/// 4. Exchange auth code for MS access token
+/// 5. Exchange MS token for Xbox Live token
+/// 6. Exchange Xbox Live token for XSTS token
+/// 7. Exchange XSTS token for Minecraft access token
+/// 8. Fetch Minecraft profile (username, UUID, skin)
 
-// Azure AD app client ID for public MC launchers
-// This is the same client ID used by Prism Launcher and other open-source launchers
-const CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-9ce8-d3ef388ea6c5";
-const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+// Azure AD app client ID — needs to be registered at https://portal.azure.com
+// For now, we'll use a placeholder that prompts the user to register their own
+// or we can register one for Fusion Launcher
+const CLIENT_ID: &str = "1fec8e78-bce4-4aaf-ab1b-5451cc387264"; // Minecraft launcher public client
+const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MC_AUTH_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
-const MC_OWNERSHIP_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
 
 /// Stored account info (persisted to disk).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,36 +34,24 @@ pub struct MinecraftAccount {
     pub access_token: String,
     pub refresh_token: String,
     pub skin_url: Option<String>,
-    pub token_expiry: i64,  // unix timestamp
+    pub token_expiry: i64,
 }
 
-/// Device code response — shown to user.
+/// Info returned to frontend when starting login.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DeviceCodeInfo {
-    pub user_code: String,
-    pub verification_uri: String,
-    pub message: String,
-    pub expires_in: u64,
-    pub interval: u64,
-}
-
-#[derive(Deserialize)]
-struct DeviceCodeResponse {
-    device_code: String,
-    user_code: String,
-    verification_uri: String,
-    message: String,
-    expires_in: u64,
-    interval: u64,
+pub struct LoginStartInfo {
+    pub auth_url: String,
+    pub port: u16,
 }
 
 #[derive(Deserialize)]
 struct TokenResponse {
     access_token: String,
     refresh_token: Option<String>,
-    expires_in: Option<u64>,
     #[serde(default)]
     error: Option<String>,
+    #[serde(default)]
+    error_description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -101,63 +90,112 @@ struct McSkin {
     url: String,
 }
 
-/// Step 1: Request a device code for the user to enter.
-pub async fn request_device_code(client: &reqwest::Client) -> Result<(String, DeviceCodeInfo), LauncherError> {
-    let response: DeviceCodeResponse = client
-        .post(DEVICE_CODE_URL)
-        .form(&[
-            ("client_id", CLIENT_ID),
-            ("scope", "XboxLive.signin offline_access"),
-        ])
-        .send().await?
-        .json().await?;
+/// Starts the OAuth login flow. Returns the URL to open in browser and the
+/// local port the callback server is listening on.
+pub fn start_login() -> Result<LoginStartInfo, LauncherError> {
+    // Bind to a random available port
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
 
-    let info = DeviceCodeInfo {
-        user_code: response.user_code.clone(),
-        verification_uri: response.verification_uri.clone(),
-        message: response.message.clone(),
-        expires_in: response.expires_in,
-        interval: response.interval,
-    };
+    let redirect_uri = format!("http://localhost:{}", port);
+    let auth_url = format!(
+        "{}?client_id={}&response_type=code&redirect_uri={}&scope={}&prompt=select_account",
+        AUTH_URL, CLIENT_ID,
+        urlencoding(&redirect_uri),
+        urlencoding("XboxLive.signin offline_access"),
+    );
 
-    Ok((response.device_code, info))
+    // Store the listener for the callback handler
+    // We'll handle it in wait_for_callback
+    std::mem::forget(listener); // Keep it alive — we'll rebind in wait_for_callback
+
+    Ok(LoginStartInfo { auth_url, port })
 }
 
-/// Step 2: Poll for token (called repeatedly until success or expiry).
-pub async fn poll_for_token(
+/// Waits for the OAuth callback on the given port and completes the full auth chain.
+pub async fn wait_for_callback(
     client: &reqwest::Client,
-    device_code: &str,
-) -> Result<Option<(String, String)>, LauncherError> {
-    let response = client
+    port: u16,
+) -> Result<MinecraftAccount, LauncherError> {
+    let redirect_uri = format!("http://localhost:{}", port);
+
+    // Listen for the callback
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port))?;
+    listener.set_nonblocking(false)?;
+
+    let (mut stream, _) = listener.accept()?;
+
+    // Read the HTTP request
+    let mut reader = std::io::BufReader::new(&stream);
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line)?;
+
+    // Extract the authorization code from the query string
+    // GET /?code=XXXX&... HTTP/1.1
+    let code = request_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|path| {
+            path.split('?').nth(1)
+        })
+        .and_then(|query| {
+            query.split('&')
+                .find(|p| p.starts_with("code="))
+                .map(|p| p.strip_prefix("code=").unwrap().to_string())
+        })
+        .ok_or_else(|| LauncherError::Other("No auth code in callback".to_string()))?;
+
+    // Send a response to the browser
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+        <html><body style='background:#111;color:#fff;font-family:sans-serif;text-align:center;padding:60px'>\
+        <h2>Login successful!</h2><p>You can close this tab and return to Fusion Launcher.</p>\
+        </body></html>";
+    stream.write_all(response.as_bytes())?;
+    drop(stream);
+    drop(listener);
+
+    // Exchange code for tokens
+    let token = exchange_code(client, &code, &redirect_uri).await?;
+    let refresh = token.1;
+    let ms_token = token.0;
+
+    // Full auth chain: MS -> Xbox -> XSTS -> MC
+    authenticate_minecraft(client, &ms_token, &refresh).await
+}
+
+async fn exchange_code(
+    client: &reqwest::Client,
+    code: &str,
+    redirect_uri: &str,
+) -> Result<(String, String), LauncherError> {
+    let resp = client
         .post(TOKEN_URL)
         .form(&[
             ("client_id", CLIENT_ID),
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-            ("device_code", device_code),
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", redirect_uri),
         ])
         .send().await?
         .text().await?;
 
-    let token: TokenResponse = serde_json::from_str(&response)
-        .map_err(|e| LauncherError::Other(format!("Token parse error: {}", e)))?;
+    let token: TokenResponse = serde_json::from_str(&resp)
+        .map_err(|e| LauncherError::Other(format!("Token parse: {} — body: {}", e, &resp[..resp.len().min(200)])))?;
 
-    if let Some(ref error) = token.error {
-        if error == "authorization_pending" {
-            return Ok(None); // Still waiting
-        }
-        return Err(LauncherError::Other(format!("Auth error: {}", error)));
+    if let Some(ref err) = token.error {
+        let desc = token.error_description.as_deref().unwrap_or("");
+        return Err(LauncherError::Other(format!("Auth error: {} — {}", err, desc)));
     }
 
-    let refresh = token.refresh_token.unwrap_or_default();
-    Ok(Some((token.access_token, refresh)))
+    Ok((token.access_token, token.refresh_token.unwrap_or_default()))
 }
 
-/// Step 3: Refresh an existing token without user interaction.
+/// Refreshes an existing token.
 pub async fn refresh_token(
     client: &reqwest::Client,
     refresh_token: &str,
 ) -> Result<(String, String), LauncherError> {
-    let token: TokenResponse = client
+    let resp = client
         .post(TOKEN_URL)
         .form(&[
             ("client_id", CLIENT_ID),
@@ -165,22 +203,25 @@ pub async fn refresh_token(
             ("refresh_token", refresh_token),
         ])
         .send().await?
-        .json().await?;
+        .text().await?;
 
-    if let Some(ref error) = token.error {
-        return Err(LauncherError::Other(format!("Refresh error: {}", error)));
+    let token: TokenResponse = serde_json::from_str(&resp)
+        .map_err(|e| LauncherError::Other(format!("Refresh parse: {}", e)))?;
+
+    if let Some(ref err) = token.error {
+        return Err(LauncherError::Other(format!("Refresh error: {}", err)));
     }
 
     Ok((token.access_token, token.refresh_token.unwrap_or_default()))
 }
 
-/// Steps 4-7: Exchange MS token through the full chain to get MC access token + profile.
+/// Exchange MS token through Xbox -> XSTS -> MC to get a Minecraft account.
 pub async fn authenticate_minecraft(
     client: &reqwest::Client,
     ms_access_token: &str,
     ms_refresh_token: &str,
 ) -> Result<MinecraftAccount, LauncherError> {
-    // Step 4: Xbox Live
+    // Xbox Live
     let xbox: XboxResponse = client
         .post(XBOX_AUTH_URL)
         .json(&serde_json::json!({
@@ -198,10 +239,9 @@ pub async fn authenticate_minecraft(
         .json().await?;
 
     let uhs = xbox.display_claims.xui.first()
-        .map(|x| x.uhs.clone())
-        .unwrap_or_default();
+        .map(|x| x.uhs.clone()).unwrap_or_default();
 
-    // Step 5: XSTS
+    // XSTS
     let xsts: XboxResponse = client
         .post(XSTS_AUTH_URL)
         .json(&serde_json::json!({
@@ -217,7 +257,7 @@ pub async fn authenticate_minecraft(
         .send().await?
         .json().await?;
 
-    // Step 6: Minecraft auth
+    // Minecraft
     let mc_auth: McAuthResponse = client
         .post(MC_AUTH_URL)
         .json(&serde_json::json!({
@@ -226,16 +266,14 @@ pub async fn authenticate_minecraft(
         .send().await?
         .json().await?;
 
-    // Step 7: Minecraft profile
+    // Profile
     let profile: McProfile = client
         .get(MC_PROFILE_URL)
         .header("Authorization", format!("Bearer {}", mc_auth.access_token))
         .send().await?
         .json().await?;
 
-    let skin_url = profile.skins
-        .and_then(|skins| skins.first().map(|s| s.url.clone()));
-
+    let skin_url = profile.skins.and_then(|s| s.first().map(|s| s.url.clone()));
     let expiry = chrono::Utc::now().timestamp() + mc_auth.expires_in as i64;
 
     Ok(MinecraftAccount {
@@ -248,24 +286,23 @@ pub async fn authenticate_minecraft(
     })
 }
 
-/// Checks if a stored account's token is still valid (not expired).
 pub fn is_token_valid(account: &MinecraftAccount) -> bool {
-    let now = chrono::Utc::now().timestamp();
-    account.token_expiry > now + 300 // 5 minute buffer
+    chrono::Utc::now().timestamp() < account.token_expiry - 300
 }
 
-/// Saves account to disk.
 pub fn save_account(data_dir: &std::path::Path, account: &MinecraftAccount) -> Result<(), LauncherError> {
-    let path = data_dir.join("account.json");
     let json = serde_json::to_string_pretty(account)?;
-    std::fs::write(&path, json)?;
+    std::fs::write(data_dir.join("account.json"), json)?;
     Ok(())
 }
 
-/// Loads account from disk.
 pub fn load_account(data_dir: &std::path::Path) -> Option<MinecraftAccount> {
     let path = data_dir.join("account.json");
     if !path.exists() { return None; }
-    let json = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&json).ok()
+    std::fs::read_to_string(&path).ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+}
+
+fn urlencoding(s: &str) -> String {
+    s.replace(':', "%3A").replace('/', "%2F").replace(' ', "+")
 }

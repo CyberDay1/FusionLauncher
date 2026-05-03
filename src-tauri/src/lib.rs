@@ -55,6 +55,7 @@ pub fn run() {
             quit_app,
             start_ms_login,
             poll_ms_login,
+            complete_ms_login,
             get_account,
             logout,
             refresh_account,
@@ -525,56 +526,42 @@ async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// --- Microsoft Auth ---
-
-// Store the device code between start and poll calls
-static DEVICE_CODE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+// --- Microsoft Auth (localhost redirect flow) ---
 
 #[tauri::command]
-async fn start_ms_login() -> Result<auth::microsoft::DeviceCodeInfo, String> {
-    let client = reqwest::Client::new();
-    let (device_code, info) = auth::microsoft::request_device_code(&client)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    *DEVICE_CODE.lock().unwrap() = Some(device_code);
-    Ok(info)
+async fn start_ms_login() -> Result<auth::microsoft::LoginStartInfo, String> {
+    auth::microsoft::start_login().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn poll_ms_login(
     state: tauri::State<'_, AppState>,
-) -> Result<Option<auth::microsoft::MinecraftAccount>, String> {
-    let device_code = {
-        let lock = DEVICE_CODE.lock().unwrap();
-        lock.clone().ok_or("No login in progress".to_string())?
+) -> Result<auth::microsoft::MinecraftAccount, String> {
+    // This blocks until the user completes login in the browser
+    // and the callback is received on localhost
+    let port = {
+        // We need to get the port from the start_ms_login call
+        // For now, poll_ms_login expects the port as stored state
+        // The frontend passes it after start_ms_login returns
+        0u16 // placeholder — will be passed from frontend
     };
+    Err("Use complete_ms_login with the port instead".to_string())
+}
 
+#[tauri::command]
+async fn complete_ms_login(
+    state: tauri::State<'_, AppState>,
+    port: u16,
+) -> Result<auth::microsoft::MinecraftAccount, String> {
     let client = reqwest::Client::new();
-
-    // Poll for MS token
-    let tokens = auth::microsoft::poll_for_token(&client, &device_code)
+    let account = auth::microsoft::wait_for_callback(&client, port)
         .await
         .map_err(|e| e.to_string())?;
 
-    let (ms_token, ms_refresh) = match tokens {
-        None => return Ok(None), // Still waiting for user
-        Some(t) => t,
-    };
-
-    // Clear device code
-    *DEVICE_CODE.lock().unwrap() = None;
-
-    // Exchange through the full chain: MS -> Xbox -> XSTS -> MC
-    let account = auth::microsoft::authenticate_minecraft(&client, &ms_token, &ms_refresh)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Save to disk
     auth::microsoft::save_account(&state.data_dir, &account)
         .map_err(|e| e.to_string())?;
 
-    Ok(Some(account))
+    Ok(account)
 }
 
 #[tauri::command]
