@@ -189,6 +189,35 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Appearance */}
+      <div style={sectionStyle}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 16px 0" }}>Appearance</h2>
+        <label style={labelStyle}>Accent Color</label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            { name: "Indigo", color: "#6366f1" },
+            { name: "Purple", color: "#8b5cf6" },
+            { name: "Blue", color: "#3b82f6" },
+            { name: "Cyan", color: "#06b6d4" },
+            { name: "Green", color: "#22c55e" },
+            { name: "Emerald", color: "#10b981" },
+            { name: "Red", color: "#ef4444" },
+            { name: "Orange", color: "#f59e0b" },
+            { name: "Pink", color: "#ec4899" },
+            { name: "Rose", color: "#f43f5e" },
+          ].map(({ name, color }) => (
+            <button key={name} title={name} style={{
+              width: 32, height: 32, borderRadius: 8, border: "2px solid transparent",
+              background: color, cursor: "pointer",
+              boxShadow: color === "#6366f1" ? `0 0 0 2px #fff3` : "none",
+            }} />
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: "#555", marginTop: 8 }}>
+          Theme customization coming in a future update.
+        </p>
+      </div>
+
       {/* About */}
       <div style={sectionStyle}>
         <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 12px 0" }}>About</h2>
