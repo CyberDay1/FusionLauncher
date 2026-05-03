@@ -23,13 +23,19 @@ const inputStyle: React.CSSProperties = {
   width: "100%", boxSizing: "border-box",
 };
 
+// Cache Java detection results across page navigations
+let cachedJavaRuntimes: JavaRuntime[] | null = null;
+let cachedSelectedJava: string = "";
+
 export default function SettingsPage() {
-  const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
+  const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>(cachedJavaRuntimes || []);
   const [detecting, setDetecting] = useState(false);
-  const [selectedJava, setSelectedJava] = useState("");
+  const [selectedJava, setSelectedJava] = useState(cachedSelectedJava);
 
   useEffect(() => {
-    detectJava();
+    if (!cachedJavaRuntimes) {
+      detectJava();
+    }
   }, []);
 
   async function detectJava() {
@@ -37,10 +43,12 @@ export default function SettingsPage() {
     try {
       const runtimes = await invoke<JavaRuntime[]>("detect_java");
       setJavaRuntimes(runtimes);
+      cachedJavaRuntimes = runtimes;
       if (runtimes.length > 0 && !selectedJava) {
         // Auto-select the first Java 25+
         const best = runtimes.find(r => r.version.major >= 25) || runtimes[0];
         setSelectedJava(best.path);
+        cachedSelectedJava = best.path;
       }
     } catch (e) { console.error("Java detection failed:", e); }
     setDetecting(false);
@@ -83,7 +91,7 @@ export default function SettingsPage() {
                 const meetsReq = rt.version.major >= 25;
                 return (
                   <div key={rt.path}
-                    onClick={() => setSelectedJava(rt.path)}
+                    onClick={() => { setSelectedJava(rt.path); cachedSelectedJava = rt.path; }}
                     style={{
                       padding: "8px 12px", borderRadius: 8, cursor: "pointer",
                       background: isSelected ? "#6366f118" : "#0f0f0f",

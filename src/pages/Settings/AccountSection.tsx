@@ -19,7 +19,6 @@ export default function AccountSection() {
   const [account, setAccount] = useState<MinecraftAccount | null>(null);
   const [loginState, setLoginState] = useState<"idle" | "waiting">("idle");
   const [error, setError] = useState("");
-  const [userClickedLogin, setUserClickedLogin] = useState(false);
 
   useEffect(() => {
     loadAccount();
@@ -37,7 +36,6 @@ export default function AccountSection() {
 
   async function startLogin() {
     setError("");
-    setUserClickedLogin(true);
     setLoginState("waiting");
     try {
       const info = await invoke<LoginStartInfo>("start_ms_login");
@@ -54,10 +52,7 @@ export default function AccountSection() {
       setError("");
     } catch (e: any) {
       setLoginState("idle");
-      // Only show error if the user explicitly clicked login
-      if (userClickedLogin) {
-        setError(String(e));
-      }
+      setError(String(e));
     }
   }
 
@@ -109,7 +104,7 @@ export default function AccountSection() {
           <p style={{ fontSize: 13, color: "#888", marginBottom: 14 }}>
             Sign in with your Microsoft account to play online and download Minecraft.
           </p>
-          {error && userClickedLogin && (
+          {error && (
             <div style={{
               fontSize: 12, color: "#ef4444", marginBottom: 10,
               padding: "8px 12px", background: "#ef444410", borderRadius: 6,
