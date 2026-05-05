@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAccentColor } from "../../hooks/useAccentColor";
 import AccountSection from "./AccountSection";
 
 interface JavaRuntime {
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>(cachedJavaRuntimes || []);
   const [detecting, setDetecting] = useState(false);
   const [selectedJava, setSelectedJava] = useState(cachedSelectedJava);
+  const currentAccent = useAccentColor();
+  const [activeAccent, setActiveAccent] = useState(currentAccent);
 
   useEffect(() => {
     if (!cachedJavaRuntimes) {
@@ -206,16 +209,22 @@ export default function SettingsPage() {
             { name: "Pink", color: "#ec4899" },
             { name: "Rose", color: "#f43f5e" },
           ].map(({ name, color }) => (
-            <button key={name} title={name} style={{
-              width: 32, height: 32, borderRadius: 8, border: "2px solid transparent",
+            <button key={name} title={name} onClick={async () => {
+              setActiveAccent(color);
+              window.dispatchEvent(new CustomEvent("accent-color-changed", { detail: color }));
+              try {
+                const settings = await invoke<Record<string, unknown>>("get_settings");
+                await invoke("update_settings", { settings: { ...settings, accent_color: color } });
+              } catch (e) { console.error(e); }
+            }} style={{
+              width: 32, height: 32, borderRadius: 8,
+              border: activeAccent === color ? "2px solid #fff8" : "2px solid transparent",
               background: color, cursor: "pointer",
-              boxShadow: color === "#6366f1" ? `0 0 0 2px #fff3` : "none",
+              boxShadow: activeAccent === color ? `0 0 8px ${color}60` : "none",
+              transition: "border-color 0.15s, box-shadow 0.15s",
             }} />
           ))}
         </div>
-        <p style={{ fontSize: 11, color: "#555", marginTop: 8 }}>
-          Theme customization coming in a future update.
-        </p>
       </div>
 
       {/* About */}

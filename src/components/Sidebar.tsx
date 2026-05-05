@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useAccentColor } from "../hooks/useAccentColor";
 
 const navItems = [
   { path: "/", label: "Home", icon: "\u2302" },
@@ -14,6 +15,7 @@ const navItems = [
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const accentColor = useAccentColor();
   const [serverRunning, setServerRunning] = useState(false);
   const [instanceCount, setInstanceCount] = useState(0);
 
@@ -45,7 +47,7 @@ export default function Sidebar() {
               style={{
                 width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-                background: isActive ? "linear-gradient(135deg, #4f46e5, #6366f1)" : "transparent",
+                background: isActive ? `linear-gradient(135deg, ${accentColor}cc, ${accentColor})` : "transparent",
                 color: isActive ? "#fff" : "#808080", border: "none", cursor: "pointer",
                 boxShadow: isActive ? "0 2px 12px rgba(79,70,229,0.3)" : "none",
                 transition: "background 0.15s",

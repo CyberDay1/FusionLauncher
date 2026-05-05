@@ -103,6 +103,10 @@ pub struct LauncherSettings {
     /// UI theme
     pub theme: Theme,
 
+    /// Accent color hex (e.g., "#6366f1")
+    #[serde(default = "default_accent_color")]
+    pub accent_color: String,
+
     /// Update channel
     pub update_channel: UpdateChannel,
 
@@ -124,12 +128,17 @@ impl Default for LauncherSettings {
             default_max_memory_mb: 4096,
             default_jvm_args: vec![],
             theme: Theme::Dark,
+            accent_color: default_accent_color(),
             update_channel: UpdateChannel::Stable,
             close_on_launch: false,
             minimize_to_tray: true,
             check_updates_on_start: true,
         }
     }
+}
+
+fn default_accent_color() -> String {
+    "#6366f1".to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

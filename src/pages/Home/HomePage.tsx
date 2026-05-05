@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-// useNavigate available if needed
+import { useAccentColor } from "../../hooks/useAccentColor";
 
 interface UpdateInfo {
   available: boolean;
@@ -224,7 +224,8 @@ export default function HomePage() {
 
 function InstanceCard({ instance }: { instance: InstanceConfig }) {
   const isServer = instance.instance_type === "Server";
-  const accentColor = isServer ? "#f59e0b" : "#6366f1";
+  const globalAccent = useAccentColor();
+  const accentColor = isServer ? "#f59e0b" : globalAccent;
 
   return (
     <div style={{

@@ -34,6 +34,7 @@ pub fn run() {
             get_mc_versions,
             create_instance,
             list_instances,
+            update_instance,
             install_instance,
             launch_instance,
             stop_instance,
@@ -155,6 +156,34 @@ async fn list_instances(
     Ok(instances.values().cloned().collect())
 }
 
+#[tauri::command]
+async fn update_instance(
+    state: tauri::State<'_, AppState>,
+    instance_id: String,
+    java_path: Option<String>,
+    min_memory_mb: Option<u32>,
+    max_memory_mb: Option<u32>,
+    jvm_args: Option<Vec<String>>,
+) -> Result<(), String> {
+    let mut instances = state.instances.write().map_err(|e| e.to_string())?;
+    let config = instances.get_mut(&instance_id)
+        .ok_or_else(|| format!("Instance not found: {}", instance_id))?;
+
+    if let Some(jp) = java_path {
+        config.java_path = if jp.is_empty() { None } else { Some(std::path::PathBuf::from(jp)) };
+    }
+    if let Some(min) = min_memory_mb { config.min_memory_mb = min; }
+    if let Some(max) = max_memory_mb { config.max_memory_mb = max; }
+    if let Some(args) = jvm_args { config.jvm_args = args; }
+
+    // Persist to disk
+    let config_path = state.instances_dir().join(&instance_id).join("instance.json");
+    if let Ok(json) = serde_json::to_string_pretty(config) {
+        std::fs::write(&config_path, json).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // --- Install + Launch ---
 
 #[tauri::command]
@@ -192,8 +221,10 @@ async fn launch_instance(
     let libraries_dir = game_dir.join("libraries");
     let assets_dir = state.assets_dir();
 
-    // Get Java path
-    let java_path = {
+    // Get Java path — prefer per-instance override, fall back to global
+    let java_path = if let Some(ref instance_java) = config.java_path {
+        instance_java.clone()
+    } else {
         let rt = state.java_runtime.read().map_err(|e| e.to_string())?;
         rt.as_ref()
             .ok_or("No Java runtime available".to_string())?

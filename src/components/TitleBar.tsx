@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import { useAccentColor } from "../hooks/useAccentColor";
 import AccountBadge from "./AccountBadge";
 
 function getWindow() {
@@ -34,6 +35,7 @@ function WinBtn({ onClick, hoverBg, children }: {
 }
 
 export default function TitleBar() {
+  const accentColor = useAccentColor();
   return (
     <div
       data-tauri-drag-region
@@ -47,7 +49,7 @@ export default function TitleBar() {
       <div style={{ display: "flex", alignItems: "center", gap: 10 }} data-tauri-drag-region>
         <div style={{
           width: 16, height: 16, borderRadius: 4,
-          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+          background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
         }} />
         <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em" }}>
           FUSION LAUNCHER

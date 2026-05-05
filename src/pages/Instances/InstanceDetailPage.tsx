@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { useAccentColor } from "../../hooks/useAccentColor";
+
+interface JavaRuntime {
+  path: string;
+  version: { major: number; minor: number; patch: number };
+  vendor: string;
+  arch: string;
+}
 
 interface InstanceConfig {
   id: string;
@@ -9,6 +17,10 @@ interface InstanceConfig {
   minecraft_version: string;
   fusion_version: string;
   install_status: string;
+  java_path: string | null;
+  min_memory_mb: number;
+  max_memory_mb: number;
+  jvm_args: string[];
 }
 
 interface ModInfo {
@@ -36,11 +48,14 @@ export default function InstanceDetailPage() {
   const [mods, setMods] = useState<ModInfo[]>([]);
   const [activeTab, setActiveTab] = useState<"mods" | "config" | "worlds">("mods");
   const [toggling, setToggling] = useState<string | null>(null);
+  const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
+  const [configDirty, setConfigDirty] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     loadInstance();
     loadMods();
+    loadJavaRuntimes();
   }, [id]);
 
   async function loadInstance() {
@@ -48,6 +63,33 @@ export default function InstanceDetailPage() {
       const list = await invoke<InstanceConfig[]>("list_instances");
       setInstance(list.find(i => i.id === id) || null);
     } catch {}
+  }
+
+  async function loadJavaRuntimes() {
+    try {
+      const runtimes = await invoke<JavaRuntime[]>("detect_java");
+      setJavaRuntimes(runtimes);
+    } catch {}
+  }
+
+  async function saveConfig(patch: {
+    java_path?: string | null;
+    min_memory_mb?: number;
+    max_memory_mb?: number;
+    jvm_args?: string[];
+  }) {
+    if (!id || !instance) return;
+    try {
+      await invoke("update_instance", {
+        instanceId: id,
+        javaPath: patch.java_path !== undefined ? (patch.java_path || "") : undefined,
+        minMemoryMb: patch.min_memory_mb,
+        maxMemoryMb: patch.max_memory_mb,
+        jvmArgs: patch.jvm_args,
+      });
+      await loadInstance();
+      setConfigDirty(false);
+    } catch (e) { console.error(e); }
   }
 
   async function loadMods() {
@@ -75,7 +117,8 @@ export default function InstanceDetailPage() {
   }
 
   const isServer = instance.instance_type === "Server";
-  const accent = isServer ? "#f59e0b" : "#6366f1";
+  const globalAccent = useAccentColor();
+  const accent = isServer ? "#f59e0b" : globalAccent;
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", height: "100%", overflow: "hidden" }}>
@@ -201,12 +244,143 @@ export default function InstanceDetailPage() {
           </div>
         )}
 
-        {activeTab === "config" && (
-          <div style={{
-            background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
-            padding: "40px 20px", textAlign: "center", color: "#555", fontSize: 13,
-          }}>
-            Config editor coming soon
+        {activeTab === "config" && instance && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Java Runtime */}
+            <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e5e5", marginBottom: 10 }}>Java Runtime</div>
+              <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>
+                {instance.java_path ? "Using instance-specific Java" : "Using global Java (from Settings)"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {/* Global default option */}
+                <div
+                  onClick={() => saveConfig({ java_path: null })}
+                  style={{
+                    padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                    background: !instance.java_path ? `${accent}18` : "#0f0f0f",
+                    border: `1px solid ${!instance.java_path ? `${accent}40` : "#1e1e1e"}`,
+                    display: "flex", alignItems: "center", gap: 10,
+                    transition: "border-color 0.15s",
+                  }}
+                >
+                  <div style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: !instance.java_path ? accent : "#333",
+                  }} />
+                  <div>
+                    <div style={{ fontSize: 12, color: "#ccc", fontWeight: 500 }}>Use global default</div>
+                    <div style={{ fontSize: 10, color: "#555" }}>Inherits from Settings page</div>
+                  </div>
+                </div>
+                {/* Detected runtimes */}
+                {javaRuntimes.map(rt => {
+                  const isSelected = instance.java_path === rt.path;
+                  const v = rt.version;
+                  return (
+                    <div
+                      key={rt.path}
+                      onClick={() => saveConfig({ java_path: rt.path })}
+                      style={{
+                        padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                        background: isSelected ? `${accent}18` : "#0f0f0f",
+                        border: `1px solid ${isSelected ? `${accent}40` : "#1e1e1e"}`,
+                        display: "flex", alignItems: "center", gap: 10,
+                        transition: "border-color 0.15s",
+                      }}
+                    >
+                      <div style={{
+                        width: 8, height: 8, borderRadius: "50%",
+                        background: isSelected ? accent : v.major >= 21 ? "#22c55e" : "#f59e0b",
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: "#ccc", fontWeight: 500 }}>
+                          Java {v.major}.{v.minor}.{v.patch}
+                          <span style={{ color: "#555", fontWeight: 400, marginLeft: 6 }}>{rt.vendor}</span>
+                          <span style={{ color: "#444", fontWeight: 400, marginLeft: 4, fontSize: 10 }}>{rt.arch}</span>
+                        </div>
+                        <div style={{
+                          fontSize: 10, color: "#444", marginTop: 1,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>{rt.path}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {javaRuntimes.length === 0 && (
+                  <div style={{ fontSize: 11, color: "#555", padding: "8px 0" }}>
+                    Detecting Java runtimes...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Memory */}
+            <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e5e5", marginBottom: 10 }}>Memory</div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>Min (MB)</label>
+                  <input
+                    type="number" min={256} step={256}
+                    value={instance.min_memory_mb}
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 512;
+                      setInstance({ ...instance, min_memory_mb: val });
+                      setConfigDirty(true);
+                    }}
+                    onBlur={() => { if (configDirty) saveConfig({ min_memory_mb: instance.min_memory_mb }); }}
+                    style={{
+                      width: "100%", padding: "7px 10px", borderRadius: 6, fontSize: 13,
+                      background: "#0a0a0a", border: "1px solid #1e1e1e", color: "#e5e5e5",
+                      outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>Max (MB)</label>
+                  <input
+                    type="number" min={512} step={256}
+                    value={instance.max_memory_mb}
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 4096;
+                      setInstance({ ...instance, max_memory_mb: val });
+                      setConfigDirty(true);
+                    }}
+                    onBlur={() => { if (configDirty) saveConfig({ max_memory_mb: instance.max_memory_mb }); }}
+                    style={{
+                      width: "100%", padding: "7px 10px", borderRadius: 6, fontSize: 13,
+                      background: "#0a0a0a", border: "1px solid #1e1e1e", color: "#e5e5e5",
+                      outline: "none", boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* JVM Arguments */}
+            <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e5e5", marginBottom: 10 }}>JVM Arguments</div>
+              <textarea
+                value={instance.jvm_args.join("\n")}
+                placeholder="One argument per line (e.g. -XX:+UseG1GC)"
+                onChange={e => {
+                  const args = e.target.value.split("\n");
+                  setInstance({ ...instance, jvm_args: args });
+                  setConfigDirty(true);
+                }}
+                onBlur={() => {
+                  if (configDirty) saveConfig({ jvm_args: instance.jvm_args.filter(a => a.trim()) });
+                }}
+                rows={3}
+                style={{
+                  width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 12,
+                  background: "#0a0a0a", border: "1px solid #1e1e1e", color: "#e5e5e5",
+                  outline: "none", resize: "vertical", fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
           </div>
         )}
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigate } from "react-router";
+import { useAccentColor } from "../../hooks/useAccentColor";
 
 interface InstanceConfig {
   id: string;
@@ -140,7 +141,8 @@ export default function InstancesPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {instances.map((inst) => {
             const isServer = inst.instance_type === "Server";
-            const accent = isServer ? "#f59e0b" : "#6366f1";
+            const globalAccent = useAccentColor();
+            const accent = isServer ? "#f59e0b" : globalAccent;
             return (
               <div key={inst.id} style={{
                 background: "#131313", border: "1px solid #1e1e1e", borderRadius: 10,
