@@ -1,5 +1,5 @@
 use crate::error::LauncherError;
-use crate::instance::config::{InstanceConfig, InstallStatus};
+use crate::instance::config::InstallStatus;
 use crate::state::AppState;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
@@ -34,7 +34,7 @@ pub async fn install_instance(
         "step": "Checking Java", "current": 1, "total": 6, "percent": 0
     }));
 
-    let java_path = ensure_java(app, state).await?;
+    let _java_path = ensure_java(app, state).await?;
 
     // Step 2: Download Minecraft
     let _ = app.emit("install-progress", serde_json::json!({

@@ -14,13 +14,14 @@ pub mod auth;
 use instance::config::{InstanceConfig, InstanceType};
 use java::runtime::JavaRuntime;
 use minecraft::manifest::VersionEntry;
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState::new();
     app_state.load_settings();
+    app_state.load_instances();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

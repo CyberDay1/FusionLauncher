@@ -76,6 +76,31 @@ impl AppState {
         }
     }
 
+    /// Load all instances from disk (called at startup).
+    pub fn load_instances(&self) {
+        let dir = self.instances_dir();
+        if !dir.exists() { return; }
+
+        let mut loaded = 0u32;
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() { continue; }
+                let config_path = entry.path().join("instance.json");
+                if !config_path.exists() { continue; }
+                if let Ok(json) = std::fs::read_to_string(&config_path) {
+                    if let Ok(config) = serde_json::from_str::<InstanceConfig>(&json) {
+                        let id = config.id.clone();
+                        self.instances.write().unwrap().insert(id, config);
+                        loaded += 1;
+                    }
+                }
+            }
+        }
+        if loaded > 0 {
+            tracing::info!("Loaded {} instance(s) from disk", loaded);
+        }
+    }
+
     /// Save settings to disk
     pub fn save_settings(&self) {
         let path = self.settings_path();

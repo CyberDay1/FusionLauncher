@@ -1,5 +1,5 @@
+#![allow(dead_code)]
 use crate::error::LauncherError;
-use crate::java::runtime::{JavaRuntime, JavaVersion};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
@@ -178,6 +178,7 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), LauncherError> {
 }
 
 fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), LauncherError> {
+    #[allow(unused_imports)]
     use std::io::Read;
     let file = std::fs::File::open(archive)?;
     let gz = flate2::read::GzDecoder::new(file);

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::error::LauncherError;
 use std::io::{Read, Write};
 use std::net::TcpStream;

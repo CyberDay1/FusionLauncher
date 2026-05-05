@@ -1,8 +1,8 @@
 use crate::error::LauncherError;
 use crate::minecraft::library;
-use crate::minecraft::manifest::{self, VersionDetail, VersionManifest};
+use crate::minecraft::manifest::{self, VersionDetail};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::{AppHandle, Emitter};
 
 #[derive(Clone, Serialize)]
