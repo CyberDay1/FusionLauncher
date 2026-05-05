@@ -6,15 +6,27 @@ use tauri::{AppHandle, Emitter};
 /// Fusion Loader's own dependencies that aren't in the vanilla MC manifest.
 /// These must be downloaded separately and placed on the classpath.
 /// Versions match gradle/libs.versions.toml in the Fusion Loader repo.
+/// Dependencies matching gradle/libs.versions.toml in the Fusion Loader repo.
 const FUSION_DEPENDENCIES: &[(&str, &str)] = &[
-    ("org.spongepowered:mixin:0.15.5+mixin.0.8.8", "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.15.5+mixin.0.8.8/mixin-0.15.5+mixin.0.8.8.jar"),
+    // Mixin (Fabric's fork of SpongePowered Mixin)
+    ("net.fabricmc:sponge-mixin:0.17.1+mixin.0.8.7", "https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.17.1+mixin.0.8.7/sponge-mixin-0.17.1+mixin.0.8.7.jar"),
+    // MixinExtras
+    ("io.github.llamalad7:mixinextras-common:0.5.3", "https://repo1.maven.org/maven2/io/github/llamalad7/mixinextras-common/0.5.3/mixinextras-common-0.5.3.jar"),
+    // ASM 9.8
     ("org.ow2.asm:asm:9.8", "https://repo1.maven.org/maven2/org/ow2/asm/asm/9.8/asm-9.8.jar"),
     ("org.ow2.asm:asm-tree:9.8", "https://repo1.maven.org/maven2/org/ow2/asm/asm-tree/9.8/asm-tree-9.8.jar"),
     ("org.ow2.asm:asm-util:9.8", "https://repo1.maven.org/maven2/org/ow2/asm/asm-util/9.8/asm-util-9.8.jar"),
     ("org.ow2.asm:asm-commons:9.8", "https://repo1.maven.org/maven2/org/ow2/asm/asm-commons/9.8/asm-commons-9.8.jar"),
     ("org.ow2.asm:asm-analysis:9.8", "https://repo1.maven.org/maven2/org/ow2/asm/asm-analysis/9.8/asm-analysis-9.8.jar"),
+    // NightConfig (TOML parsing)
     ("com.electronwill.night-config:core:3.8.1", "https://repo1.maven.org/maven2/com/electronwill/night-config/core/3.8.1/core-3.8.1.jar"),
     ("com.electronwill.night-config:toml:3.8.1", "https://repo1.maven.org/maven2/com/electronwill/night-config/toml/3.8.1/toml-3.8.1.jar"),
+    // Guava (needed by Mixin)
+    ("com.google.guava:guava:33.4.8-jre", "https://repo1.maven.org/maven2/com/google/guava/guava/33.4.8-jre/guava-33.4.8-jre.jar"),
+    // Gson (JSON)
+    ("com.google.code.gson:gson:2.12.1", "https://repo1.maven.org/maven2/com/google/code/gson/gson/2.12.1/gson-2.12.1.jar"),
+    // SLF4J (logging)
+    ("org.slf4j:slf4j-api:2.0.9", "https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.9/slf4j-api-2.0.9.jar"),
 ];
 
 /// Installs Fusion Loader dependencies to the libraries directory.

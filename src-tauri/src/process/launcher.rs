@@ -29,12 +29,23 @@ impl ProcessLauncher {
         cmd.arg(format!("-Xms{}m", instance.min_memory_mb));
         cmd.arg(format!("-Xmx{}m", instance.max_memory_mb));
 
-        // Java 25 preview features (required by Fusion Loader)
-        cmd.arg("--enable-preview");
+        // Version-specific JVM flags
+        let mc_major: u32 = instance.minecraft_version
+            .split('.').next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
 
-        // GC — ZGC generational for low-latency
-        cmd.arg("-XX:+UseZGC");
-        cmd.arg("-XX:+ZGenerational");
+        if mc_major >= 26 {
+            // MC 26+ requires Java 25 with preview features
+            cmd.arg("--enable-preview");
+            cmd.arg("-XX:+UseZGC");
+            cmd.arg("-XX:+ZGenerational");
+        } else {
+            // MC 1.21.x runs on Java 21 — use G1GC (safe default)
+            cmd.arg("-XX:+UseG1GC");
+            cmd.arg("-XX:+ParallelRefProcEnabled");
+            cmd.arg("-XX:MaxGCPauseMillis=200");
+        }
 
         // Log4j config (mirrors FusionClient.main())
         cmd.arg("-Dlog4j.configurationFile=log4j2-fusion.xml");
@@ -76,9 +87,9 @@ impl ProcessLauncher {
             cmd.arg("--assetsDir");
             cmd.arg(assets_dir.to_string_lossy().to_string());
 
-            // Asset index — derive from MC version (e.g., 26.1.2 -> 30 for recent MC)
+            // Asset index — read from version JSON (e.g., "17" for 1.21.1, "21" for 26.1)
             cmd.arg("--assetIndex");
-            cmd.arg(derive_asset_index(&instance.minecraft_version));
+            cmd.arg(read_asset_index(game_dir, &instance.minecraft_version));
 
             // Auth
             cmd.arg("--accessToken");
@@ -190,19 +201,18 @@ fn build_classpath(
         .join(separator))
 }
 
-/// Derives the asset index from the MC version.
-/// For MC 26.x this is typically "30" or similar.
-fn derive_asset_index(mc_version: &str) -> String {
-    // Parse major version
-    let parts: Vec<&str> = mc_version.split('.').collect();
-    if let Some(major) = parts.first() {
-        match major.parse::<u32>() {
-            Ok(v) if v >= 26 => return "30".to_string(),
-            Ok(v) if v >= 21 => return "20".to_string(),
-            Ok(v) if v >= 17 => return "17".to_string(),
-            _ => {}
+/// Reads the asset index ID from the version JSON.
+fn read_asset_index(game_dir: &Path, mc_version: &str) -> String {
+    let version_json = game_dir
+        .join("versions")
+        .join(mc_version)
+        .join(format!("{}.json", mc_version));
+
+    if let Ok(content) = std::fs::read_to_string(&version_json) {
+        if let Ok(detail) = serde_json::from_str::<manifest::VersionDetail>(&content) {
+            return detail.asset_index.id;
         }
     }
-    // Fallback — read from version JSON at runtime
-    "30".to_string()
+    // Fallback for pre-downloaded versions
+    mc_version.to_string()
 }

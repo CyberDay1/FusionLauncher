@@ -33,13 +33,35 @@ pub async fn fetch_releases(client: &reqwest::Client) -> Result<Vec<GithubReleas
     Ok(releases)
 }
 
+/// Fetches the best matching release for a given MC version.
+/// Prefers releases tagged with the MC version (e.g., "v0.1.0-1.21.1"),
+/// then falls back to the latest non-prerelease.
+pub async fn fetch_release_for_version(
+    client: &reqwest::Client,
+    mc_version: &str,
+) -> Result<GithubRelease, LauncherError> {
+    let releases = fetch_releases(client).await?;
+
+    // Try to find a release tagged for this MC version
+    if let Some(versioned) = releases.iter().find(|r| {
+        r.tag_name.contains(mc_version) || r.name.as_deref().unwrap_or("").contains(mc_version)
+    }) {
+        return Ok(versioned.clone());
+    }
+
+    // Fall back to latest non-prerelease
+    releases
+        .into_iter()
+        .find(|r| !r.prerelease)
+        .ok_or_else(|| LauncherError::Download("No Fusion Loader releases found".to_string()))
+}
+
 /// Fetches the latest release (non-prerelease).
 pub async fn fetch_latest_release(client: &reqwest::Client) -> Result<GithubRelease, LauncherError> {
     let releases = fetch_releases(client).await?;
     releases
         .into_iter()
         .find(|r| !r.prerelease)
-        .or_else(|| None)
         .ok_or_else(|| LauncherError::Download("No Fusion Loader releases found".to_string()))
 }
 

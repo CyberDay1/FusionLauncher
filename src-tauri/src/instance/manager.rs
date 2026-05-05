@@ -52,7 +52,7 @@ pub async fn install_instance(
         "step": "Downloading Fusion Loader", "current": 3, "total": 6, "percent": 33
     }));
 
-    let release = crate::fusion::releases::fetch_latest_release(&client).await?;
+    let release = crate::fusion::releases::fetch_release_for_version(&client, &config.minecraft_version).await?;
     crate::fusion::modules::install_fusion_modules(
         app, &client, &release, &libraries_dir, &config.fusion_version
     ).await?;

@@ -29,7 +29,7 @@ pub fn maven_to_path(libraries_dir: &Path, coordinate: &str) -> PathBuf {
     }
 
     let path = format!(
-        "{}/{}/{}/{}-{}{}. {}",
+        "{}/{}/{}/{}-{}{}.{}",
         group.replace('.', "/"),
         artifact,
         version,
@@ -67,6 +67,7 @@ pub const FUSION_OPTIONAL_MODULES: &[&str] = &[
     "fusion-portals",
     "fusion-map",
     "fusion-claims",
+    "fusion-devtools",
 ];
 
 /// Builds the path for a Fusion module JAR.
