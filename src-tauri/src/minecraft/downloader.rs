@@ -20,6 +20,7 @@ pub async fn install_minecraft(
     client: &reqwest::Client,
     version_id: &str,
     game_dir: &Path,
+    assets_dir: &Path,
     is_server: bool,
 ) -> Result<(), LauncherError> {
     // Step 1: Fetch version manifest
@@ -108,10 +109,93 @@ pub async fn install_minecraft(
         });
     }
 
-    // Step 5: Done
+    // Step 5: Download assets (client only)
+    if !is_server {
+        emit_progress(app, "Downloading assets", "", 4, 5);
+        download_assets(app, client, &detail, assets_dir).await?;
+    }
+
+    // Step 6: Done
     emit_progress(app, "Installation complete", version_id, 5, 5);
 
     Ok(())
+}
+
+/// Downloads the asset index + all asset objects for a MC version.
+pub async fn download_assets(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    detail: &VersionDetail,
+    assets_dir: &Path,
+) -> Result<(), LauncherError> {
+    let index_id = &detail.asset_index.id;
+    let indexes_dir = assets_dir.join("indexes");
+    let objects_dir = assets_dir.join("objects");
+    std::fs::create_dir_all(&indexes_dir)?;
+    std::fs::create_dir_all(&objects_dir)?;
+
+    // Download asset index JSON
+    let index_path = indexes_dir.join(format!("{}.json", index_id));
+    if !index_path.exists() {
+        download_file(client, &detail.asset_index.url, &index_path).await?;
+    }
+
+    // Parse the index to get all asset objects
+    let index_content = std::fs::read_to_string(&index_path)?;
+    let index: AssetIndex = serde_json::from_str(&index_content)
+        .map_err(|e| LauncherError::Other(format!("Failed to parse asset index: {}", e)))?;
+
+    // Deduplicate by hash (many assets share the same file)
+    let mut unique_hashes: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut to_download: Vec<(String, u64)> = Vec::new();
+    for obj in index.objects.values() {
+        if unique_hashes.insert(obj.hash.clone()) {
+            let prefix = &obj.hash[..2];
+            let obj_path = objects_dir.join(prefix).join(&obj.hash);
+            if !obj_path.exists() {
+                to_download.push((obj.hash.clone(), obj.size));
+            }
+        }
+    }
+
+    let total = to_download.len() as u32;
+    if total == 0 {
+        return Ok(());
+    }
+
+    // Download missing assets (batch with progress)
+    for (i, (hash, _size)) in to_download.iter().enumerate() {
+        let prefix = &hash[..2];
+        let obj_path = objects_dir.join(prefix).join(hash);
+        std::fs::create_dir_all(obj_path.parent().unwrap())?;
+
+        let url = format!("https://resources.download.minecraft.net/{}/{}", prefix, hash);
+        download_file(client, &url, &obj_path).await?;
+
+        // Emit progress every 50 assets to avoid flooding
+        if i % 50 == 0 || i as u32 == total - 1 {
+            let _ = app.emit("mc-download-progress", InstallProgress {
+                step: "Downloading assets".to_string(),
+                item: format!("{}/{}", i + 1, total),
+                current: i as u32 + 1,
+                total,
+                percent: ((i + 1) as f64 / total as f64) * 100.0,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AssetIndex {
+    objects: std::collections::HashMap<String, AssetObject>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AssetObject {
+    hash: String,
+    size: u64,
 }
 
 /// Downloads a file from a URL to a local path.

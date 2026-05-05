@@ -42,8 +42,9 @@ pub async fn install_instance(
     }));
 
     let is_server = config.instance_type == crate::instance::config::InstanceType::Server;
+    let assets_dir = state.assets_dir();
     crate::minecraft::downloader::install_minecraft(
-        app, &client, &config.minecraft_version, &game_dir, is_server
+        app, &client, &config.minecraft_version, &game_dir, &assets_dir, is_server
     ).await?;
 
     // Step 3: Download Fusion Loader release
@@ -65,16 +66,7 @@ pub async fn install_instance(
         app, &client, &libraries_dir
     ).await?;
 
-    // Step 5: Download assets (client only)
-    if !is_server {
-        let _ = app.emit("install-progress", serde_json::json!({
-            "step": "Downloading Assets", "current": 5, "total": 6, "percent": 66
-        }));
-        // Asset download is handled by MC's own asset system on first launch
-        // We just ensure the assets directory exists
-        let assets_dir = state.assets_dir();
-        std::fs::create_dir_all(&assets_dir)?;
-    }
+    // Step 5: Assets are now downloaded by install_minecraft() directly
 
     // Step 6: Mark as ready
     update_install_status(state, instance_id, InstallStatus::Ready)?;
