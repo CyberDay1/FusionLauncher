@@ -164,6 +164,8 @@ async fn update_instance(
     min_memory_mb: Option<u32>,
     max_memory_mb: Option<u32>,
     jvm_args: Option<Vec<String>>,
+    auto_restart: Option<bool>,
+    restart_delay: Option<u32>,
 ) -> Result<(), String> {
     let mut instances = state.instances.write().map_err(|e| e.to_string())?;
     let config = instances.get_mut(&instance_id)
@@ -175,6 +177,8 @@ async fn update_instance(
     if let Some(min) = min_memory_mb { config.min_memory_mb = min; }
     if let Some(max) = max_memory_mb { config.max_memory_mb = max; }
     if let Some(args) = jvm_args { config.jvm_args = args; }
+    if let Some(ar) = auto_restart { config.auto_restart = ar; }
+    if let Some(rd) = restart_delay { config.restart_delay_secs = rd; }
 
     // Persist to disk
     let config_path = state.instances_dir().join(&instance_id).join("instance.json");

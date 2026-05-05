@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 interface LogLine { timestamp: string; stream: string; text: string; }
-interface InstanceConfig { id: string; name: string; instance_type: string; minecraft_version: string; install_status: string; }
+interface InstanceConfig {
+  id: string; name: string; instance_type: string; minecraft_version: string;
+  install_status: string; auto_restart: boolean; restart_delay_secs: number;
+}
 
 const tabStyle = (active: boolean): React.CSSProperties => ({
   padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
@@ -26,15 +29,30 @@ export default function ServerPage() {
   const [servers, setServers] = useState<InstanceConfig[]>([]);
   const [selectedServer, setSelectedServer] = useState("");
   const [serverRunning, setServerRunning] = useState(false);
+  const [perfHistory, setPerfHistory] = useState<{ tps: number; mspt: number; time: string }[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadServers();
     const unlisten = listen<any>("process-log", (event) => {
       if (selectedServer && event.payload.instance_id === selectedServer) {
+        const line: string = event.payload.line;
         setLogs((prev) => [...prev.slice(-3000), {
-          timestamp: event.payload.timestamp, stream: event.payload.stream, text: event.payload.line,
+          timestamp: event.payload.timestamp, stream: event.payload.stream, text: line,
         }]);
+        // Parse TPS from log lines (Spark, Paper, Vanilla "Can't keep up")
+        if (line.includes("TPS")) {
+          const nums = line.match(/(\d+\.?\d*)/g);
+          if (nums) {
+            const tps = parseFloat(nums[nums.length - 1]);
+            if (tps > 0 && tps <= 20) {
+              const mspt = 1000 / tps;
+              setPerfHistory(prev => [...prev.slice(-60), {
+                tps, mspt, time: event.payload.timestamp,
+              }]);
+            }
+          }
+        }
       }
     });
     const unlistenStatus = listen<any>("process-status", (event) => {
@@ -158,6 +176,41 @@ export default function ServerPage() {
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
             {activeTab === "console" && (
               <>
+                {/* Performance strip */}
+                {perfHistory.length > 0 && (
+                  <div style={{
+                    background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: 10,
+                    padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 16,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span style={{ fontSize: 10, color: "#666" }}>TPS</span>
+                      <span style={{
+                        fontSize: 20, fontWeight: 700, fontFamily: "monospace",
+                        color: perfHistory[perfHistory.length - 1].tps >= 19 ? "#22c55e"
+                          : perfHistory[perfHistory.length - 1].tps >= 15 ? "#f59e0b" : "#ef4444",
+                      }}>{perfHistory[perfHistory.length - 1].tps.toFixed(1)}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span style={{ fontSize: 10, color: "#666" }}>MSPT</span>
+                      <span style={{
+                        fontSize: 20, fontWeight: 700, fontFamily: "monospace",
+                        color: perfHistory[perfHistory.length - 1].mspt <= 50 ? "#22c55e"
+                          : perfHistory[perfHistory.length - 1].mspt <= 66 ? "#f59e0b" : "#ef4444",
+                      }}>{perfHistory[perfHistory.length - 1].mspt.toFixed(1)}</span>
+                    </div>
+                    {/* Mini bar chart */}
+                    <div style={{ flex: 1, display: "flex", alignItems: "end", gap: 1, height: 24 }}>
+                      {perfHistory.slice(-40).map((p, i) => (
+                        <div key={i} style={{
+                          flex: 1, minWidth: 2,
+                          height: `${Math.min(100, (p.mspt / 100) * 100)}%`,
+                          background: p.mspt <= 50 ? "#22c55e40" : p.mspt <= 66 ? "#f59e0b40" : "#ef444440",
+                          borderRadius: 1,
+                        }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={{
                   flex: 1, background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 10,
                   padding: 14, overflowY: "auto", fontFamily: "'Cascadia Code', 'Consolas', monospace",
@@ -189,8 +242,64 @@ export default function ServerPage() {
               </>
             )}
 
-            {activeTab === "config" && (
-              <div style={{ flex: 1, background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 20, overflowY: "auto" }}>
+            {activeTab === "config" && (() => {
+              const serverConfig = servers.find(s => s.id === selectedServer);
+              return (
+              <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Restart Settings */}
+                {serverConfig && (
+                <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16 }}>
+                  <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: "0 0 12px 0" }}>Restart Settings</h2>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {/* Auto-restart toggle */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <div style={{ fontSize: 13, color: "#ccc" }}>Auto-restart on crash</div>
+                        <div style={{ fontSize: 11, color: "#555" }}>Automatically restart the server if the process exits unexpectedly</div>
+                      </div>
+                      <div
+                        onClick={async () => {
+                          const newVal = !serverConfig.auto_restart;
+                          setServers(prev => prev.map(s => s.id === selectedServer ? { ...s, auto_restart: newVal } : s));
+                          await invoke("update_instance", { instanceId: selectedServer, autoRestart: newVal }).catch(() => {});
+                        }}
+                        style={{
+                          width: 40, height: 22, borderRadius: 11, padding: 2, cursor: "pointer",
+                          background: serverConfig.auto_restart ? "#22c55e" : "#2a2a2a",
+                          transition: "background 0.2s", flexShrink: 0,
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: "50%",
+                          background: serverConfig.auto_restart ? "#fff" : "#666",
+                          transform: serverConfig.auto_restart ? "translateX(18px)" : "translateX(0)",
+                          transition: "transform 0.2s, background 0.2s",
+                        }} />
+                      </div>
+                    </div>
+                    {/* Restart delay */}
+                    {serverConfig.auto_restart && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, color: "#888", width: 120, flexShrink: 0 }}>Restart delay</span>
+                        <input type="number" min={0} max={300} value={serverConfig.restart_delay_secs}
+                          onChange={e => {
+                            const val = parseInt(e.target.value) || 10;
+                            setServers(prev => prev.map(s => s.id === selectedServer ? { ...s, restart_delay_secs: val } : s));
+                          }}
+                          onBlur={async e => {
+                            await invoke("update_instance", { instanceId: selectedServer, restartDelay: parseInt(e.target.value) || 10 }).catch(() => {});
+                          }}
+                          style={{ ...input, width: 80 }}
+                        />
+                        <span style={{ fontSize: 11, color: "#555" }}>seconds</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {/* server.properties */}
+              <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <h2 style={{ fontSize: 15, fontWeight: 600, color: "#e5e5e5", margin: 0 }}>server.properties</h2>
                   {Object.keys(properties).length > 0 && (
@@ -213,7 +322,9 @@ export default function ServerPage() {
                   </div>
                 )}
               </div>
-            )}
+              </div>
+              );
+            })()}
 
             {activeTab === "players" && (
               <div style={{ flex: 1, background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 20 }}>
