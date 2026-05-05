@@ -49,7 +49,7 @@ pub async fn install_minecraft(
     if let Some(entry) = jar_entry {
         let jar_path = versions_dir.join(format!("{}.jar", version_id));
         if !jar_path.exists() {
-            download_file(client, &entry.url, &jar_path).await?;
+            download_file_verified(client, &entry.url, &jar_path, Some(&entry.sha1)).await?;
         }
     }
 
@@ -79,7 +79,7 @@ pub async fn install_minecraft(
                     if let Some(parent) = lib_path.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    download_file(client, &artifact.url, &lib_path).await?;
+                    download_file_verified(client, &artifact.url, &lib_path, Some(&artifact.sha1)).await?;
                 }
             }
         } else {
@@ -163,26 +163,48 @@ pub async fn download_assets(
         return Ok(());
     }
 
-    // Download missing assets (batch with progress)
-    for (i, (hash, _size)) in to_download.iter().enumerate() {
+    // Ensure all prefix directories exist upfront
+    for (hash, _) in &to_download {
         let prefix = &hash[..2];
-        let obj_path = objects_dir.join(prefix).join(hash);
-        std::fs::create_dir_all(obj_path.parent().unwrap())?;
-
-        let url = format!("https://resources.download.minecraft.net/{}/{}", prefix, hash);
-        download_file(client, &url, &obj_path).await?;
-
-        // Emit progress every 50 assets to avoid flooding
-        if i % 50 == 0 || i as u32 == total - 1 {
-            let _ = app.emit("mc-download-progress", InstallProgress {
-                step: "Downloading assets".to_string(),
-                item: format!("{}/{}", i + 1, total),
-                current: i as u32 + 1,
-                total,
-                percent: ((i + 1) as f64 / total as f64) * 100.0,
-            });
-        }
+        std::fs::create_dir_all(objects_dir.join(prefix))?;
     }
+
+    // Download missing assets concurrently (16 parallel)
+    use futures_util::stream::{self, StreamExt};
+    let completed = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let app_clone = app.clone();
+    let client = client.clone();
+    let objects_dir = objects_dir.to_path_buf();
+
+    stream::iter(to_download.into_iter().map(|(hash, _size)| {
+        let client = client.clone();
+        let objects_dir = objects_dir.clone();
+        let completed = completed.clone();
+        let app_clone = app_clone.clone();
+        async move {
+            let prefix = &hash[..2];
+            let obj_path = objects_dir.join(prefix).join(&hash);
+            let url = format!("https://resources.download.minecraft.net/{}/{}", prefix, hash);
+            let result = download_file_verified(&client, &url, &obj_path, Some(&hash)).await;
+
+            let done = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            if done % 100 == 0 || done == total {
+                let _ = app_clone.emit("mc-download-progress", InstallProgress {
+                    step: "Downloading assets".to_string(),
+                    item: format!("{}/{}", done, total),
+                    current: done,
+                    total,
+                    percent: (done as f64 / total as f64) * 100.0,
+                });
+            }
+            result
+        }
+    }))
+    .buffer_unordered(16)
+    .collect::<Vec<_>>()
+    .await
+    .into_iter()
+    .collect::<Result<Vec<_>, _>>()?;
 
     Ok(())
 }
@@ -204,6 +226,16 @@ pub async fn download_file(
     url: &str,
     dest: &Path,
 ) -> Result<(), LauncherError> {
+    download_file_verified(client, url, dest, None).await
+}
+
+/// Downloads a file and optionally verifies its SHA1 hash.
+pub async fn download_file_verified(
+    client: &reqwest::Client,
+    url: &str,
+    dest: &Path,
+    expected_sha1: Option<&str>,
+) -> Result<(), LauncherError> {
     let response = client.get(url).send().await?;
 
     if !response.status().is_success() {
@@ -215,6 +247,18 @@ pub async fn download_file(
     }
 
     let bytes = response.bytes().await?;
+
+    if let Some(expected) = expected_sha1 {
+        use sha1::{Sha1, Digest};
+        let actual = format!("{:x}", Sha1::digest(&bytes));
+        if actual != expected {
+            return Err(LauncherError::Download(format!(
+                "SHA1 mismatch for {}: expected {}, got {}",
+                url, expected, actual
+            )));
+        }
+    }
+
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }

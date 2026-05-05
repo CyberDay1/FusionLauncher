@@ -62,6 +62,7 @@ pub fn run() {
             logout,
             refresh_account,
             detect_installs,
+            import_instance,
             quick_play,
             check_mod_updates,
             apply_mod_update,
@@ -653,6 +654,79 @@ async fn refresh_account(
 #[tauri::command]
 async fn detect_installs() -> Result<Vec<instance::import::DetectedInstall>, String> {
     Ok(instance::import::detect_installations())
+}
+
+#[tauri::command]
+async fn import_instance(
+    state: tauri::State<'_, AppState>,
+    name: String,
+    source_path: String,
+    mc_version: String,
+) -> Result<String, String> {
+    let config = InstanceConfig::new(
+        name, InstanceType::Client, mc_version, "0.1.0-alpha.1".to_string(),
+    );
+    let id = config.id.clone();
+    let inst_dir = state.instances_dir().join(&id);
+    let game_dir = inst_dir.join(".minecraft");
+    let mods_dir = game_dir.join("mods");
+
+    std::fs::create_dir_all(&inst_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
+
+    let source = std::path::PathBuf::from(&source_path);
+
+    // Copy mods
+    let source_mods = source.join("mods");
+    if source_mods.exists() {
+        if let Ok(entries) = std::fs::read_dir(&source_mods) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "jar").unwrap_or(false) {
+                    let dest = mods_dir.join(entry.file_name());
+                    std::fs::copy(&path, &dest).ok();
+                }
+            }
+        }
+    }
+
+    // Copy worlds (saves/ for client)
+    let source_saves = source.join("saves");
+    let dest_saves = game_dir.join("saves");
+    if source_saves.exists() {
+        copy_dir_recursive(&source_saves, &dest_saves).ok();
+    }
+
+    // Copy config/
+    let source_config = source.join("config");
+    let dest_config = game_dir.join("config");
+    if source_config.exists() {
+        copy_dir_recursive(&source_config, &dest_config).ok();
+    }
+
+    // Save instance config
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    std::fs::write(inst_dir.join("instance.json"), config_json).map_err(|e| e.to_string())?;
+
+    // Register in memory
+    state.instances.write().map_err(|e| e.to_string())?.insert(id.clone(), config);
+
+    Ok(id)
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            std::fs::copy(entry.path(), &dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 // --- Quick Play (Home page Play Client button) ---

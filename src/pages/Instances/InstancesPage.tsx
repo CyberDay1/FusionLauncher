@@ -185,18 +185,34 @@ export default function InstancesPage() {
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>{inst.path}</div>
                   </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: 11, color: "#888" }}>MC {inst.mc_version}</div>
-                    <div style={{ fontSize: 10, color: "#555" }}>
-                      {inst.mod_count > 0 && `${inst.mod_count} mods`}
-                      {inst.mod_count > 0 && inst.world_count > 0 && " \u00B7 "}
-                      {inst.world_count > 0 && `${inst.world_count} worlds`}
+                  <div style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: "#888" }}>MC {inst.mc_version}</div>
+                      <div style={{ fontSize: 10, color: "#555" }}>
+                        {inst.mod_count > 0 && `${inst.mod_count} mods`}
+                        {inst.mod_count > 0 && inst.world_count > 0 && " \u00B7 "}
+                        {inst.world_count > 0 && `${inst.world_count} worlds`}
+                      </div>
                     </div>
+                    <button onClick={async () => {
+                      try {
+                        const id = await invoke<string>("import_instance", {
+                          name: inst.name, sourcePath: inst.path, mcVersion: inst.mc_version,
+                        });
+                        setShowImport(false);
+                        await loadInstances();
+                        navigate(`/instances/${id}`);
+                      } catch (e) { console.error(e); }
+                    }} style={{
+                      padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+                      background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                      color: "#fff", border: "none", cursor: "pointer",
+                    }}>Import</button>
                   </div>
                 </div>
               ))}
               <div style={{ fontSize: 10, color: "#444", marginTop: 4 }}>
-                Import functionality coming soon -- detected installations shown for reference
+                Imports mods, worlds, and config from the selected installation.
               </div>
             </div>
           )}
