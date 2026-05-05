@@ -14,6 +14,19 @@ interface InstanceConfig {
   last_played: string | null;
 }
 
+interface DetectedInstall {
+  name: string;
+  path: string;
+  source: string;
+  mc_version: string;
+  mod_count: number;
+  world_count: number;
+}
+
+const sourceIcons: Record<string, string> = {
+  vanilla: "\u2B23", curseforge: "\uD83D\uDD25", prism: "\u25C8", multimc: "\u25A3", atlauncher: "\u25B2",
+};
+
 const input: React.CSSProperties = {
   background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8,
   padding: "8px 12px", fontSize: 13, color: "#e5e5e5", outline: "none",
@@ -34,6 +47,9 @@ export default function InstancesPage() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
   const [mcVersions, setMcVersions] = useState<string[]>([]);
+  const [showImport, setShowImport] = useState(false);
+  const [detectedInstalls, setDetectedInstalls] = useState<DetectedInstall[]>([]);
+  const [scanning, setScanning] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -83,10 +99,26 @@ export default function InstancesPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0 }}>Instances</h1>
-        <button onClick={() => setCreating(!creating)}
-          style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
-          + New Instance
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={async () => {
+            setShowImport(!showImport);
+            if (!showImport && detectedInstalls.length === 0) {
+              setScanning(true);
+              try {
+                const installs = await invoke<DetectedInstall[]>("detect_installs");
+                setDetectedInstalls(installs);
+              } catch {}
+              setScanning(false);
+            }
+          }}
+            style={{ ...btn, background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#aaa" }}>
+            Import
+          </button>
+          <button onClick={() => setCreating(!creating)}
+            style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+            + New Instance
+          </button>
+        </div>
       </div>
 
       {/* Create form */}
@@ -119,6 +151,55 @@ export default function InstancesPage() {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Import panel */}
+      {showImport && (
+        <div style={{ background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "#e5e5e5", margin: 0 }}>Detected Installations</h3>
+            <button onClick={() => setShowImport(false)}
+              style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 16 }}>x</button>
+          </div>
+          {scanning ? (
+            <div style={{ fontSize: 12, color: "#666", padding: "12px 0" }}>Scanning for installations...</div>
+          ) : detectedInstalls.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#555", padding: "12px 0" }}>No installations found</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {detectedInstalls.map((inst, i) => (
+                <div key={i} style={{
+                  padding: "10px 12px", borderRadius: 8, background: "#0f0f0f",
+                  border: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8, background: "#1a1a1a",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 14, color: "#666",
+                  }}>{sourceIcons[inst.source] || "?"}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#ccc" }}>{inst.name}</div>
+                    <div style={{
+                      fontSize: 10, color: "#555", marginTop: 1,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{inst.path}</div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, color: "#888" }}>MC {inst.mc_version}</div>
+                    <div style={{ fontSize: 10, color: "#555" }}>
+                      {inst.mod_count > 0 && `${inst.mod_count} mods`}
+                      {inst.mod_count > 0 && inst.world_count > 0 && " \u00B7 "}
+                      {inst.world_count > 0 && `${inst.world_count} worlds`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 10, color: "#444", marginTop: 4 }}>
+                Import functionality coming soon -- detected installations shown for reference
+              </div>
+            </div>
+          )}
         </div>
       )}
 

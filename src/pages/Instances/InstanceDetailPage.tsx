@@ -23,6 +23,17 @@ interface InstanceConfig {
   jvm_args: string[];
 }
 
+interface ModUpdate {
+  filename: string;
+  mod_id: string;
+  name: string;
+  current_version: string;
+  latest_version: string;
+  latest_url: string;
+  latest_filename: string;
+  latest_size: number;
+}
+
 interface ModInfo {
   filename: string;
   mod_id: string;
@@ -50,6 +61,9 @@ export default function InstanceDetailPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
   const [configDirty, setConfigDirty] = useState(false);
+  const [updates, setUpdates] = useState<ModUpdate[]>([]);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updatingMod, setUpdatingMod] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -90,6 +104,32 @@ export default function InstanceDetailPage() {
       await loadInstance();
       setConfigDirty(false);
     } catch (e) { console.error(e); }
+  }
+
+  async function checkUpdates() {
+    if (!id || !instance) return;
+    setCheckingUpdates(true);
+    try {
+      const result = await invoke<ModUpdate[]>("check_mod_updates", {
+        instanceId: id, mcVersion: instance.minecraft_version,
+      });
+      setUpdates(result);
+    } catch (e) { console.error(e); }
+    setCheckingUpdates(false);
+  }
+
+  async function applyUpdate(update: ModUpdate) {
+    if (!id) return;
+    setUpdatingMod(update.filename);
+    try {
+      await invoke("apply_mod_update", {
+        instanceId: id, filename: update.filename,
+        url: update.latest_url, newFilename: update.latest_filename,
+      });
+      setUpdates(prev => prev.filter(u => u.filename !== update.filename));
+      await loadMods();
+    } catch (e) { console.error(e); }
+    setUpdatingMod(null);
   }
 
   async function loadMods() {
@@ -163,6 +203,46 @@ export default function InstanceDetailPage() {
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
         {activeTab === "mods" && (
           <div>
+            {/* Update banner */}
+            {updates.length > 0 && (
+              <div style={{
+                background: "#1a2e1a", border: "1px solid #22c55e30", borderRadius: 10,
+                padding: "10px 14px", marginBottom: 8,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#22c55e", marginBottom: 6 }}>
+                  {updates.length} update{updates.length > 1 ? "s" : ""} available
+                </div>
+                {updates.map(u => (
+                  <div key={u.filename} style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "4px 0",
+                  }}>
+                    <span style={{ flex: 1, fontSize: 12, color: "#ccc" }}>
+                      {u.name} <span style={{ color: "#666" }}>{u.current_version} &rarr; {u.latest_version}</span>
+                    </span>
+                    <button onClick={() => applyUpdate(u)} disabled={updatingMod === u.filename}
+                      style={{
+                        padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: "#22c55e", color: "#fff", border: "none",
+                        cursor: updatingMod === u.filename ? "wait" : "pointer",
+                        opacity: updatingMod === u.filename ? 0.6 : 1,
+                      }}>
+                      {updatingMod === u.filename ? "Updating..." : "Update"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Check updates button */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={checkUpdates} disabled={checkingUpdates}
+                style={{
+                  padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500,
+                  background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888",
+                  cursor: checkingUpdates ? "wait" : "pointer",
+                }}>
+                {checkingUpdates ? "Checking..." : "Check for Updates"}
+              </button>
+            </div>
             {mods.length === 0 ? (
               <div style={{
                 background: "#131313", border: "1px solid #1e1e1e", borderRadius: 12,
