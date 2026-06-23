@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
+import { useAccentColor } from "../../hooks/useAccentColor";
 
 interface MinecraftAccount {
   username: string;
@@ -18,6 +19,7 @@ interface DeviceCodeInfo {
 }
 
 export default function AccountSection() {
+  const accentColor = useAccentColor();
   const [account, setAccount] = useState<MinecraftAccount | null>(null);
   const [loginState, setLoginState] = useState<"idle" | "waiting">("idle");
   const [error, setError] = useState("");
@@ -41,6 +43,7 @@ export default function AccountSection() {
       const result = await invoke<MinecraftAccount | null>("poll_ms_login");
       if (result) {
         setAccount(result);
+        window.dispatchEvent(new Event("account-changed"));
       }
       setLoginState("idle");
     } catch (e: any) {
@@ -50,7 +53,7 @@ export default function AccountSection() {
   }
 
   async function handleLogout() {
-    try { await invoke("logout"); setAccount(null); setError(""); } catch {}
+    try { await invoke("logout"); setAccount(null); setError(""); window.dispatchEvent(new Event("account-changed")); } catch {}
   }
 
   return (
@@ -101,7 +104,7 @@ export default function AccountSection() {
               </div>
               <div style={{ height: 3, borderRadius: 2, background: "#1a1a1a", overflow: "hidden" }}>
                 <div style={{
-                  height: "100%", background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+                  height: "100%", background: `linear-gradient(90deg, ${accentColor}, ${accentColor}cc)`,
                   width: "30%", animation: "loading 1.5s ease-in-out infinite alternate",
                 }} />
               </div>
@@ -110,7 +113,7 @@ export default function AccountSection() {
           ) : (
             <button onClick={startLogin} style={{
               padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
               color: "#fff", border: "none", cursor: "pointer",
               display: "flex", alignItems: "center", gap: 8,
             }}>

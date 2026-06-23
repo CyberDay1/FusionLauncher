@@ -15,6 +15,9 @@ export default function AccountBadge() {
 
   useEffect(() => {
     invoke<MinecraftAccount | null>("get_account").then(setAccount).catch(() => {});
+    const refresh = () => { invoke<MinecraftAccount | null>("get_account").then(setAccount).catch(() => {}); };
+    window.addEventListener("account-changed", refresh);
+    return () => window.removeEventListener("account-changed", refresh);
   }, []);
 
   const base: React.CSSProperties = {

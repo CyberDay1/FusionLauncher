@@ -5,12 +5,10 @@ use std::net::TcpListener;
 
 /// Microsoft OAuth2 Auth Code Flow with localhost redirect for Minecraft.
 ///
-/// Uses Prism Launcher's client ID (pre-registered with Xbox/MC services).
-/// Uses Fusion Launcher's own Azure app with auth code flow.
-/// Xbox/XSTS auth works. MC services may reject unregistered apps —
-/// in that case we fall back to Xbox profile as the identity.
+/// Uses Prism Launcher's Azure AD client ID (registered + approved with MC services).
+/// Auth chain: MS OAuth -> Xbox Live -> XSTS -> MC Services -> Profile
 
-const CLIENT_ID: &str = "f39fb407-b7f5-43f0-9901-e09b9385c630";
+const CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
@@ -58,7 +56,7 @@ pub async fn request_device_code(_client: &reqwest::Client) -> Result<DeviceCode
         "{}?client_id={}&response_type=code&redirect_uri={}&scope={}&prompt=select_account",
         AUTH_URL, CLIENT_ID,
         urlenc(&redirect_uri),
-        urlenc("XboxLive.signin offline_access"),
+        urlenc("XboxLive.signin XboxLive.offline_access"),
     );
 
     *PENDING_LISTENER.lock().unwrap() = Some(listener);
@@ -136,13 +134,17 @@ pub async fn authenticate_minecraft(client: &reqwest::Client, ms_token: &str, ms
         .json(&serde_json::json!({"Properties":{"SandboxId":"RETAIL","UserTokens":[xbox.token]},"RelyingParty":"rp://api.minecraftservices.com/","TokenType":"JWT"}))
         .header("Content-Type","application/json").header("Accept","application/json")
         .send().await?.text().await?;
+    log_auth(&format!("[auth] XSTS response: {}", trunc(&xsts_body)));
     let xsts: XboxResponse = serde_json::from_str(&xsts_body)
         .map_err(|e| LauncherError::Other(format!("XSTS failed: {} — {}", e, trunc(&xsts_body))))?;
 
     // Minecraft — try MC services, fall back to Xbox identity if rejected
-    let mc_body = client.post(MC_AUTH_URL)
+    let mc_resp = client.post(MC_AUTH_URL)
         .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={};{}", uhs, xsts.token)}))
-        .send().await?.text().await?;
+        .send().await?;
+    let mc_status = mc_resp.status().as_u16();
+    let mc_body = mc_resp.text().await?;
+    log_auth(&format!("[auth] MC services response ({}): {}", mc_status, trunc(&mc_body)));
 
     match serde_json::from_str::<McAuthResponse>(&mc_body) {
         Ok(mc) => {
@@ -212,3 +214,9 @@ fn urldec(s: &str) -> String {
     }; r
 }
 fn trunc(s: &str) -> &str { &s[..s.len().min(300)] }
+fn log_auth(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(
+        std::env::temp_dir().join("fusion-auth-debug.log")
+    ) { let _ = writeln!(f, "{}", msg); }
+}
