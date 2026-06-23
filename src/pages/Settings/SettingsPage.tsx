@@ -80,8 +80,8 @@ export default function SettingsPage() {
 
         {javaRuntimes.length === 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0" }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: detecting ? "#6366f1" : "#f59e0b" }} />
-            <span style={{ fontSize: 13, color: detecting ? "#6366f1" : "#f59e0b" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: detecting ? currentAccent : "#f59e0b" }} />
+            <span style={{ fontSize: 13, color: detecting ? currentAccent : "#f59e0b" }}>
               {detecting ? "Scanning for Java..." : "No Java found — install Java 25+ or click Re-detect"}
             </span>
           </div>
@@ -97,8 +97,8 @@ export default function SettingsPage() {
                     onClick={() => { setSelectedJava(rt.path); cachedSelectedJava = rt.path; }}
                     style={{
                       padding: "8px 12px", borderRadius: 8, cursor: "pointer",
-                      background: isSelected ? "#6366f118" : "#0f0f0f",
-                      border: `1px solid ${isSelected ? "#6366f140" : "#1e1e1e"}`,
+                      background: isSelected ? `${currentAccent}18` : "#0f0f0f",
+                      border: `1px solid ${isSelected ? `${currentAccent}40` : "#1e1e1e"}`,
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       transition: "border-color 0.15s",
                     }}
@@ -165,7 +165,7 @@ export default function SettingsPage() {
           <div style={{ height: 6, borderRadius: 3, background: "#1a1a1a", position: "relative" }}>
             <div style={{
               height: "100%", borderRadius: 3, width: "50%",
-              background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+              background: `linear-gradient(90deg, ${currentAccent}, ${currentAccent}cc)`,
             }} />
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function SettingsPage() {
           <div>Built with Tauri 2 + React + TypeScript</div>
           <div style={{ marginTop: 8 }}>
             <a href="https://github.com/CyberDay1/FusionLauncher" target="_blank"
-              style={{ color: "#6366f1", textDecoration: "none" }}>
+              style={{ color: currentAccent, textDecoration: "none" }}>
               GitHub Repository
             </a>
           </div>
@@ -247,6 +247,7 @@ export default function SettingsPage() {
 
 function ToggleSetting({ label, defaultChecked }: { label: string; defaultChecked: boolean }) {
   const [checked, setChecked] = useState(defaultChecked);
+  const accentColor = useAccentColor();
 
   return (
     <div
@@ -259,7 +260,7 @@ function ToggleSetting({ label, defaultChecked }: { label: string; defaultChecke
       <span style={{ fontSize: 13, color: "#d1d5db" }}>{label}</span>
       <div style={{
         width: 38, height: 20, borderRadius: 10, padding: 2,
-        background: checked ? "#6366f1" : "#2a2a2a",
+        background: checked ? accentColor : "#2a2a2a",
         transition: "background 0.2s", position: "relative",
       }}>
         <div style={{

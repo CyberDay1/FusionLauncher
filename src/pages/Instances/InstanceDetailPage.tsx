@@ -46,11 +46,14 @@ interface ModInfo {
   file_size: number;
 }
 
-const tabStyle = (active: boolean): React.CSSProperties => ({
-  padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-  background: active ? "linear-gradient(135deg, #6366f1, #4f46e5)" : "#1a1a1a",
-  color: active ? "#fff" : "#888", border: "none", cursor: "pointer",
-});
+function useTabStyle() {
+  const accentColor = useAccentColor();
+  return (active: boolean): React.CSSProperties => ({
+    padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+    background: active ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : "#1a1a1a",
+    color: active ? "#fff" : "#888", border: "none", cursor: "pointer",
+  });
+}
 
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -159,6 +162,7 @@ export default function InstanceDetailPage() {
   const isServer = instance.instance_type === "Server";
   const globalAccent = useAccentColor();
   const accent = isServer ? "#f59e0b" : globalAccent;
+  const tabStyle = useTabStyle();
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, width: "100%", boxSizing: "border-box", height: "100%", overflow: "hidden" }}>
@@ -254,7 +258,7 @@ export default function InstanceDetailPage() {
                 <p style={{ fontSize: 13, color: "#555", marginBottom: 14 }}>No mods installed</p>
                 <button onClick={() => navigate(`/instances/${id}/mods`)} style={{
                   padding: "8px 20px", borderRadius: 8, fontSize: 12, fontWeight: 500,
-                  background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                  background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
                   color: "#fff", border: "none", cursor: "pointer",
                 }}>Browse Mods</button>
               </div>

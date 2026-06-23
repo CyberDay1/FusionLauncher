@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useParams, useNavigate } from "react-router";
+import { useAccentColor } from "../../hooks/useAccentColor";
 import ModDetailPanel from "./ModDetailPanel";
 
 interface InstanceConfig {
@@ -43,6 +44,7 @@ const MC_VERSIONS = ["26.1.2", "26.1.1", "26.1", "1.21.5", "1.21.4", "1.21.1", "
 export default function ModBrowserPage() {
   const { id: routeInstanceId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const accentColor = useAccentColor();
   const [query, setQuery] = useState("");
   const [mcVersion, setMcVersion] = useState("26.1.2");
   const [mods, setMods] = useState<ModrinthProject[]>([]);
@@ -224,7 +226,7 @@ export default function ModBrowserPage() {
         <button onClick={() => handleSearch(0, false)} disabled={searching}
           style={{
             padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-            background: searching ? "#333" : "linear-gradient(135deg, #6366f1, #4f46e5)",
+            background: searching ? "#333" : `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
             color: "#fff", border: "none", cursor: searching ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
           {searching ? "Searching..." : "Search"}

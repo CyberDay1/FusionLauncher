@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAccentColor } from "../../hooks/useAccentColor";
+import atomWhite from "../../assets/atom_white.png";
 
 interface UpdateInfo {
   available: boolean;
@@ -22,6 +23,7 @@ interface InstanceConfig {
 }
 
 export default function HomePage() {
+  const accentColor = useAccentColor();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(true);
   const [heroExpanded, setHeroExpanded] = useState(false);
@@ -90,8 +92,8 @@ export default function HomePage() {
 
       {/* Hero — collapsible */}
       <div style={{
-        background: "linear-gradient(145deg, #1a1040 0%, #130f25 40%, #0f0f14 100%)",
-        border: "1px solid rgba(99,102,241,0.2)", borderRadius: 16,
+        background: `linear-gradient(145deg, ${accentColor}20 0%, ${accentColor}10 40%, #0f0f14 100%)`,
+        border: `1px solid ${accentColor}33`, borderRadius: 16,
         padding: heroExpanded ? "28px 32px" : "20px 32px",
         position: "relative", overflow: "hidden",
         transition: "padding 0.2s ease",
@@ -99,7 +101,7 @@ export default function HomePage() {
         {/* Glow */}
         <div style={{
           position: "absolute", top: -60, right: -60, width: 250, height: 250, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)",
+          background: `radial-gradient(circle, ${accentColor}33 0%, transparent 70%)`,
           pointerEvents: "none",
         }} />
 
@@ -108,11 +110,17 @@ export default function HomePage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#fff", fontWeight: 700, fontSize: 15,
-              }}>F</div>
+                width: 36, height: 36,
+                background: accentColor,
+                WebkitMaskImage: `url(${atomWhite})`,
+                WebkitMaskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskImage: `url(${atomWhite})`,
+                maskSize: "contain",
+                maskRepeat: "no-repeat",
+                maskPosition: "center",
+              }} />
               <h1 style={{ fontSize: 24, fontWeight: 700, color: "#fff", margin: 0 }}>Fusion Loader</h1>
             </div>
             <button
@@ -149,8 +157,8 @@ export default function HomePage() {
           <div style={{ display: "flex", gap: 10, marginTop: heroExpanded ? 20 : 14 }}>
             <button onClick={() => handleQuickPlay("client")} disabled={!!launching} style={{
               padding: "10px 24px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: launching === "client" ? "#333" : "linear-gradient(135deg, #6366f1, #4f46e5)",
-              boxShadow: launching ? "none" : "0 4px 20px rgba(99,102,241,0.35)",
+              background: launching === "client" ? "#333" : `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+              boxShadow: launching ? "none" : `0 4px 20px ${accentColor}59`,
               color: "#fff", border: "none", cursor: launching ? "wait" : "pointer",
               display: "flex", alignItems: "center", gap: 8,
             }}>
@@ -169,8 +177,8 @@ export default function HomePage() {
 
       {/* Stats grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        <StatCard label="MC VERSION" value="26.1.2" color="#6366f1" />
-        <StatCard label="FUSION" value="0.1.0-alpha" color="#a78bfa" />
+        <StatCard label="MC VERSION" value="26.1.2" color={accentColor} />
+        <StatCard label="FUSION" value="0.1.0-alpha" color={accentColor} />
         <StatCard label="INSTANCES" value={String(instances.length)} color="#22c55e" />
         <StatCard label="MODS" value="0" color="#f59e0b" />
       </div>
@@ -180,7 +188,7 @@ export default function HomePage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 600, color: "#fff", margin: 0 }}>Recent Instances</h2>
           <button style={{
-            fontSize: 11, color: "#6366f1", background: "rgba(99,102,241,0.08)",
+            fontSize: 11, color: accentColor, background: `${accentColor}14`,
             padding: "4px 12px", borderRadius: 6, border: "none", cursor: "pointer",
           }}>View All</button>
         </div>
@@ -196,8 +204,8 @@ export default function HomePage() {
             <p style={{ fontSize: 13, color: "#555", marginBottom: 14 }}>No instances yet</p>
             <button style={{
               padding: "8px 20px", borderRadius: 8, fontSize: 12, fontWeight: 500,
-              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
-              boxShadow: "0 2px 10px rgba(99,102,241,0.25)",
+              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+              boxShadow: `0 2px 10px ${accentColor}40`,
               color: "#fff", border: "none", cursor: "pointer",
             }}>+ Create Instance</button>
           </div>
@@ -273,7 +281,7 @@ function InstanceCard({ instance }: { instance: InstanceConfig }) {
         padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
         background: instance.install_status === "Ready"
           ? "linear-gradient(135deg, #22c55e, #16a34a)"
-          : "linear-gradient(135deg, #6366f1, #4f46e5)",
+          : `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
         color: "#fff", border: "none", cursor: "pointer", flexShrink: 0,
       }}>
         {instance.install_status === "Ready" ? "Launch" : "Install"}

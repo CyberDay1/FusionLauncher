@@ -51,6 +51,7 @@ export default function InstancesPage() {
   const [detectedInstalls, setDetectedInstalls] = useState<DetectedInstall[]>([]);
   const [scanning, setScanning] = useState(false);
   const navigate = useNavigate();
+  const accentColor = useAccentColor();
 
   useEffect(() => {
     loadInstances();
@@ -115,7 +116,7 @@ export default function InstancesPage() {
             Import
           </button>
           <button onClick={() => setCreating(!creating)}
-            style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+            style={{ ...btn, background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` }}>
             + New Instance
           </button>
         </div>
@@ -143,7 +144,7 @@ export default function InstancesPage() {
               )}
             </select>
             <button onClick={handleCreate}
-              style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+              style={{ ...btn, background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` }}>
               Create
             </button>
             <button onClick={() => setCreating(false)}
@@ -205,7 +206,7 @@ export default function InstancesPage() {
                       } catch (e) { console.error(e); }
                     }} style={{
                       padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500,
-                      background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                      background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
                       color: "#fff", border: "none", cursor: "pointer",
                     }}>Import</button>
                   </div>
@@ -230,7 +231,7 @@ export default function InstancesPage() {
           </svg>
           <p style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>No instances yet. Create one to get started.</p>
           <button onClick={() => setCreating(true)}
-            style={{ ...btn, background: "linear-gradient(135deg, #6366f1, #4f46e5)", fontSize: 12 }}>
+            style={{ ...btn, background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`, fontSize: 12 }}>
             + Create Instance
           </button>
         </div>
@@ -238,8 +239,7 @@ export default function InstancesPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {instances.map((inst) => {
             const isServer = inst.instance_type === "Server";
-            const globalAccent = useAccentColor();
-            const accent = isServer ? "#f59e0b" : globalAccent;
+            const accent = isServer ? "#f59e0b" : accentColor;
             return (
               <div key={inst.id} style={{
                 background: "#131313", border: "1px solid #1e1e1e", borderRadius: 10,
@@ -277,7 +277,7 @@ export default function InstancesPage() {
                     </button>
                   ) : (
                     <button onClick={(e) => { e.stopPropagation(); handleInstall(inst.id); }}
-                      style={{ ...btn, padding: "6px 16px", fontSize: 12, background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+                      style={{ ...btn, padding: "6px 16px", fontSize: 12, background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` }}>
                       Install
                     </button>
                   )}

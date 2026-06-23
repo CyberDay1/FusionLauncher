@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAccentColor } from "../../hooks/useAccentColor";
 
 interface ModDetail {
   id: string;
@@ -59,6 +60,7 @@ function formatDownloads(n: number): string {
 export default function ModDetailPanel({ projectId, mcVersion, onClose }: {
   projectId: string; mcVersion: string; onClose: () => void;
 }) {
+  const accentColor = useAccentColor();
   const [detail, setDetail] = useState<ModDetail | null>(null);
   const [versions, setVersions] = useState<ModVersion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +145,7 @@ export default function ModDetailPanel({ projectId, mcVersion, onClose }: {
         {(["about", "versions", "gallery"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500,
-            background: activeTab === tab ? "#6366f1" : "transparent",
+            background: activeTab === tab ? accentColor : "transparent",
             color: activeTab === tab ? "#fff" : "#888",
             border: "none", cursor: "pointer", textTransform: "capitalize",
           }}>{tab} {tab === "versions" ? `(${versions.length})` : ""}</button>
@@ -285,9 +287,10 @@ export default function ModDetailPanel({ projectId, mcVersion, onClose }: {
 }
 
 function ExtLink({ label, url }: { label: string; url: string }) {
+  const accentColor = useAccentColor();
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" style={{
-      fontSize: 12, color: "#6366f1", textDecoration: "none",
+      fontSize: 12, color: accentColor, textDecoration: "none",
       display: "flex", alignItems: "center", gap: 6,
     }}>
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">

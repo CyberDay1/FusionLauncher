@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { useAccentColor } from "../hooks/useAccentColor";
 import AccountBadge from "./AccountBadge";
+import atomWhite from "../assets/atom_white.png";
 
 function getWindow() {
   return getCurrentWindow();
@@ -48,8 +49,16 @@ export default function TitleBar() {
       {/* Left: app name */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }} data-tauri-drag-region>
         <div style={{
-          width: 16, height: 16, borderRadius: 4,
-          background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+          width: 18, height: 18,
+          background: accentColor,
+          WebkitMaskImage: `url(${atomWhite})`,
+          WebkitMaskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskImage: `url(${atomWhite})`,
+          maskSize: "contain",
+          maskRepeat: "no-repeat",
+          maskPosition: "center",
         }} />
         <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em" }}>
           FUSION LAUNCHER

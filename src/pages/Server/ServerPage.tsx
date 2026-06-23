@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useAccentColor } from "../../hooks/useAccentColor";
 
 interface LogLine { timestamp: string; stream: string; text: string; }
 interface InstanceConfig {
@@ -8,11 +9,14 @@ interface InstanceConfig {
   install_status: string; auto_restart: boolean; restart_delay_secs: number;
 }
 
-const tabStyle = (active: boolean): React.CSSProperties => ({
-  padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-  background: active ? "linear-gradient(135deg, #6366f1, #4f46e5)" : "#1a1a1a",
-  color: active ? "#fff" : "#888", border: "none", cursor: "pointer",
-});
+function useTabStyle() {
+  const accentColor = useAccentColor();
+  return (active: boolean): React.CSSProperties => ({
+    padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+    background: active ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : "#1a1a1a",
+    color: active ? "#fff" : "#888", border: "none", cursor: "pointer",
+  });
+}
 
 const input: React.CSSProperties = {
   background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 6,
@@ -21,6 +25,8 @@ const input: React.CSSProperties = {
 };
 
 export default function ServerPage() {
+  const accentColor = useAccentColor();
+  const tabStyle = useTabStyle();
   const [activeTab, setActiveTab] = useState<"console" | "config" | "backups" | "players">("console");
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [command, setCommand] = useState("");
@@ -235,7 +241,7 @@ export default function ServerPage() {
                     style={{ ...input, flex: 1, padding: "10px 14px", fontSize: 13, borderRadius: 10, opacity: serverRunning ? 1 : 0.5 }} />
                   <button onClick={handleSendCommand} disabled={!serverRunning} style={{
                     padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-                    background: serverRunning ? "linear-gradient(135deg, #6366f1, #4f46e5)" : "#333",
+                    background: serverRunning ? `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` : "#333",
                     color: "#fff", border: "none", cursor: serverRunning ? "pointer" : "not-allowed",
                   }}>Send</button>
                 </div>
@@ -344,7 +350,7 @@ export default function ServerPage() {
                     .then(() => invoke<any[]>("list_backups", { instanceId: selectedServer }).then(setBackups));
                 }} style={{
                   padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600,
-                  background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                  background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
                   color: "#fff", border: "none", cursor: "pointer", alignSelf: "flex-start",
                 }}>Create Backup Now</button>
 
